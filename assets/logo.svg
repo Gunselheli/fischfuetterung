@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" role="img" aria-labelledby="title desc">
+  <title id="title">Fischzucht Arnhof Waldviertel</title>
+  <desc id="desc">Rundes Logo mit Fisch, Teichen, Wald und Schriftzug.</desc>
+  <defs>
+    <linearGradient id="water" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#83d5e4"/>
+      <stop offset="1" stop-color="#247e9a"/>
+    </linearGradient>
+    <linearGradient id="hill" x1="0" x2="1">
+      <stop offset="0" stop-color="#7fa158"/>
+      <stop offset="1" stop-color="#b7cca0"/>
+    </linearGradient>
+  </defs>
+  <circle cx="450" cy="450" r="410" fill="#fffefa" stroke="#07304a" stroke-width="24"/>
+  <path d="M165 318c105-117 180-181 292-123 82 42 130-20 202-13 68 7 119 61 164 136z" fill="url(#hill)"/>
+  <path d="M172 320c80-42 151-55 227-23 74 31 116 2 186-22 85-30 158-5 235 45" fill="none" stroke="#fffefa" stroke-width="12"/>
+  <g fill="#174d2d">
+    <path d="M175 329l34-86 34 86h-22l29 50H168l29-50z"/>
+    <path d="M242 325l42-112 42 112h-27l35 62h-101l35-62z"/>
+    <path d="M685 324l34-89 34 89h-22l30 55h-84l30-55z"/>
+    <path d="M754 332l28-75 28 75h-18l25 45h-70l25-45z"/>
+  </g>
+  <g stroke="#07304a" stroke-width="10" fill="url(#water)">
+    <path d="M188 355h202l-35 75H153z"/>
+    <path d="M420 344h215l-24 63H391z"/>
+    <path d="M628 366h195l26 76H594z"/>
+  </g>
+  <g stroke="#fffefa" stroke-width="9" opacity=".86">
+    <path d="M190 387h168"/>
+    <path d="M424 376h179"/>
+    <path d="M640 399h171"/>
+  </g>
+  <path d="M180 505c105-104 316-122 455-74 79 27 140 80 186 137-107 68-258 97-437 71-105-16-178-58-204-134z" fill="#fffefa" stroke="#07304a" stroke-width="16"/>
+  <path d="M198 500c117-76 288-88 424-45 54 17 105 44 148 81-98 40-219 60-355 39-91-14-168-42-217-75z" fill="#24465b"/>
+  <path d="M201 501c86 52 198 82 335 77 96-3 174-17 234-42-84 69-220 109-386 84-96-14-157-50-183-119z" fill="#fffefa"/>
+  <path d="M236 500c80-36 161-52 243-49 58 38 75 82 49 133-98 7-206-20-292-84z" fill="#24465b"/>
+  <circle cx="312" cy="450" r="23" fill="#fffefa"/>
+  <circle cx="312" cy="450" r="10" fill="#07304a"/>
+  <path d="M605 465c43-41 91-67 144-78-21 61-56 104-106 128z" fill="#fffefa" stroke="#07304a" stroke-width="12"/>
+  <path d="M612 622c79 1 153-20 223-64-21 70-77 115-167 137z" fill="#07304a"/>
+  <path d="M225 634c128 62 371 91 567-19" fill="none" stroke="#2d9fbd" stroke-width="24" stroke-linecap="round"/>
+  <rect x="105" y="540" width="690" height="230" rx="18" fill="#fffefa"/>
+  <path d="M105 560h690" stroke="#07304a" stroke-width="14" stroke-linecap="round"/>
+  <text x="450" y="640" text-anchor="middle" font-family="Georgia, Cambria, serif" font-size="78" font-weight="800" letter-spacing="12" fill="#07304a">FISCHZUCHT</text>
+  <text x="450" y="735" text-anchor="middle" font-family="Georgia, Cambria, serif" font-size="118" font-weight="900" letter-spacing="8" fill="#07304a">ARNHOF</text>
+  <text x="450" y="802" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" font-weight="800" letter-spacing="12" fill="#174d2d">WALDVIERTEL</text>
+</svg>
