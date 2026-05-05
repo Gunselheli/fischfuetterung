@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fischfuetterung | Fischzucht Verwaltung</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <nav class="topbar" aria-label="Hauptnavigation">
+        <div class="brand-lockup">
+          <img class="brand-logo" src="assets/logo.svg" alt="Fischzucht Arnhof Waldviertel" />
+          <div>
+            <p class="eyebrow">Fischzucht Arnhof Waldviertel</p>
+            <h1>Fischfuetterung & Bestand</h1>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <button class="ghost-button" id="exportData" type="button">Export</button>
+          <label class="ghost-button file-button">
+            Import
+            <input id="importData" type="file" accept="application/json" />
+          </label>
+          <button class="danger-button" id="resetData" type="button">Zuruecksetzen</button>
+        </div>
+      </nav>
+      <p class="hero-copy">
+        Chargen, Becken, Fuetterung, Mortalitaet, Sortierung und Schlachtung in einem lokalen System.
+        Der Zuwachs wird pro Bestand mit Futtercodex 1:1 berechnet.
+      </p>
+      <section class="metrics" id="metrics" aria-label="Kennzahlen"></section>
+    </header>
+
+    <main class="shell">
+      <section class="panel wide">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Live-Auswertung</p>
+            <h2>Beckenuebersicht</h2>
+          </div>
+          <p>Stueckzahl, berechnetes Gewicht, Futterbedarf bis zur naechsten Sortierung oder Schlachtung.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Becken</th>
+                <th>Charge</th>
+                <th>Stueck</th>
+                <th>Ø Gewicht</th>
+                <th>Biomasse</th>
+                <th>Futter gesamt</th>
+                <th>Mortalitaet</th>
+                <th>Naechstes Ziel</th>
+                <th>Futterbedarf</th>
+              </tr>
+            </thead>
+            <tbody id="stockRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="grid two">
+        <form class="panel form-card" id="batchForm">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Lieferung</p>
+              <h2>Charge anlegen</h2>
+            </div>
+          </div>
+          <label>Lieferant <input name="supplier" required placeholder="z. B. Forellenhof Nord" /></label>
+          <label>Lieferdatum <input name="date" type="date" required /></label>
+          <label>Stueckzahl <input name="count" type="number" min="1" required placeholder="3000-5000" /></label>
+          <label>Startgewicht je Fisch (g) <input name="avgWeight" type="number" min="0.1" step="0.1" required /></label>
+          <label>Futtercodex <input name="feedConversion" type="number" min="0.1" step="0.1" value="1" required /></label>
+          <button type="submit">Charge speichern</button>
+        </form>
+
+        <form class="panel form-card" id="tankForm">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Infrastruktur</p>
+              <h2>Becken anlegen</h2>
+            </div>
+          </div>
+          <label>Beckenname <input name="name" required placeholder="z. B. B-01" /></label>
+          <label>Volumen (m³) <input name="volume" type="number" min="0" step="0.1" /></label>
+          <label>Notiz <input name="note" placeholder="Halle, Kreislauf, Besonderheiten" /></label>
+          <button type="submit">Becken speichern</button>
+        </form>
+      </section>
+
+      <section class="grid two">
+        <form class="panel form-card" id="stockingForm">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Erstbesatz</p>
+              <h2>Charge auf Becken verteilen</h2>
+            </div>
+          </div>
+          <label>Charge <select name="batchId" required></select></label>
+          <label>Becken <select name="tankId" required></select></label>
+          <label>Stueckzahl <input name="count" type="number" min="1" required /></label>
+          <label>Ist-Gewicht je Fisch (g) <input name="avgWeight" type="number" min="0.1" step="0.1" required /></label>
+          <label>Datum <input name="date" type="date" required /></label>
+          <button type="submit">Besatz dokumentieren</button>
+        </form>
+
+        <form class="panel form-card" id="feedingForm">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Routine</p>
+              <h2>Fuetterung & Mortalitaet</h2>
+            </div>
+          </div>
+          <label>Bestand <select name="stockId" required></select></label>
+          <label>Datum <input name="date" type="date" required /></label>
+          <label>Zeitpunkt
+            <select name="slot" required>
+              <option value="Morgen">Morgen</option>
+              <option value="Abend">Abend</option>
+            </select>
+          </label>
+          <label>Futtermenge (kg) <input name="feedKg" type="number" min="0" step="0.01" required /></label>
+          <label>Tote Fische <input name="deadCount" type="number" min="0" step="1" value="0" required /></label>
+          <button type="submit">Fuetterung speichern</button>
+        </form>
+      </section>
+
+      <section class="grid two">
+        <form class="panel form-card" id="sortingForm">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Sortierung</p>
+              <h2>Bestand aufteilen</h2>
+            </div>
+          </div>
+          <label>Quellbestand <select name="sourceStockId" required></select></label>
+          <label>Datum <input name="date" type="date" required /></label>
+          <div class="split-grid" id="splitTargets"></div>
+          <button type="submit">Sortierung buchen</button>
+        </form>
+
+        <form class="panel form-card" id="harvestForm">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Entnahme</p>
+              <h2>Schlachtung dokumentieren</h2>
+            </div>
+          </div>
+          <label>Bestand <select name="stockId" required></select></label>
+          <label>Datum <input name="date" type="date" required /></label>
+          <label>Stueckzahl <input name="count" type="number" min="1" required /></label>
+          <label>Schlachtgewicht je Fisch (g) <input name="avgWeight" type="number" min="0.1" step="0.1" placeholder="leer = berechnet" /></label>
+          <button type="submit">Schlachtung speichern</button>
+        </form>
+      </section>
+
+      <section class="grid two">
+        <section class="panel">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Planung</p>
+              <h2>Zielgewicht berechnen</h2>
+            </div>
+          </div>
+          <form class="target-form" id="targetForm">
+            <label>Bestand <select name="stockId" required></select></label>
+            <label>Zielgewicht je Fisch (g) <input name="targetWeight" type="number" min="1" step="1" value="1500" required /></label>
+            <button type="submit">Futterbedarf berechnen</button>
+          </form>
+          <div class="result-card" id="targetResult">Noch keine Berechnung.</div>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Historie</p>
+              <h2>Letzte Ereignisse</h2>
+            </div>
+          </div>
+          <div class="timeline" id="timeline"></div>
+        </section>
+      </section>
+    </main>
+
+    <template id="splitTargetTemplate">
+      <fieldset class="split-target">
+        <legend>Zielbecken</legend>
+        <label>Becken <select name="targetTankId"></select></label>
+        <label>Stueck <input name="targetCount" type="number" min="0" step="1" /></label>
+        <label>Ø Gewicht (g) <input name="targetAvgWeight" type="number" min="0" step="0.1" /></label>
+      </fieldset>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
