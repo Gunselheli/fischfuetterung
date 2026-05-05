@@ -26,9 +26,10 @@
         </div>
       </nav>
       <p class="hero-copy">
-        Chargen, Becken, Fuetterung, Mortalitaet, Sortierung und Schlachtung in einem lokalen System.
+        Chargen, Becken, Fuetterung, Mortalitaet, Sortierung und Schlachtung in einem gemeinsamen System.
         Der Zuwachs wird pro Bestand mit Futtercodex 1:1 berechnet.
       </p>
+      <div class="sync-status" id="syncStatus">Datenbank wird verbunden...</div>
       <section class="metrics" id="metrics" aria-label="Kennzahlen"></section>
     </header>
 
@@ -195,5 +196,6 @@
     </template>
 
     <script src="app.js"></script>
+    <script src="supabase-sync.js"></script>
   </body>
 </html>
