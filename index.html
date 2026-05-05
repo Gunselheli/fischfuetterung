@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Fischfuetterung | Fischzucht Verwaltung</title>
     <link rel="stylesheet" href="styles.css" />
+    <style>
+      .secondary-button { margin-top: 0.8rem; background: var(--forest); }
+      button:disabled { cursor: not-allowed; opacity: 0.48; transform: none; }
+      .compact-table { margin-top: 1rem; max-height: 420px; border: 1px solid var(--line); border-radius: 18px; }
+      .compact-table table { min-width: 680px; }
+      .compact-table th { position: sticky; top: 0; background: rgba(247, 247, 240, 0.96); }
+      .source-note { color: var(--muted); font-size: 0.86rem; line-height: 1.45; }
+      .result-card strong { color: var(--water-dark); }
+    </style>
   </head>
   <body>
     <header class="hero">
@@ -162,6 +171,45 @@
         <section class="panel">
           <div class="section-heading compact">
             <div>
+              <p class="eyebrow">Alltech Coppens</p>
+              <h2>Futterempfehlung</h2>
+            </div>
+          </div>
+          <form class="target-form" id="feedingAdviceForm">
+            <label>Bestand <select name="stockId" required></select></label>
+            <button type="submit">Empfehlung berechnen</button>
+          </form>
+          <div class="result-card" id="feedingAdviceResult">Noch keine Empfehlung berechnet.</div>
+          <button class="secondary-button" id="applyFeedingAdvice" type="button" disabled>In Fuetterung uebernehmen</button>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Referenz</p>
+              <h2>Catfish Futtertabelle</h2>
+            </div>
+          </div>
+          <label>Tabelle
+            <select id="feedingReferenceMode">
+              <option value="growout">Grow-out</option>
+              <option value="fry">Fry-Protokoll</option>
+            </select>
+          </label>
+          <div class="table-wrap compact-table">
+            <table>
+              <thead id="feedingReferenceHead"></thead>
+              <tbody id="feedingReferenceRows"></tbody>
+            </table>
+          </div>
+          <p class="source-note">Quelle: Alltech Coppens Catfish 2025-2026, Futtertabellen Seite 4-5.</p>
+        </section>
+      </section>
+
+      <section class="grid two">
+        <section class="panel">
+          <div class="section-heading compact">
+            <div>
               <p class="eyebrow">Planung</p>
               <h2>Zielgewicht berechnen</h2>
             </div>
@@ -196,6 +244,7 @@
     </template>
 
     <script src="app.js"></script>
+    <script src="feeding-table.js"></script>
     <script src="supabase-sync.js"></script>
   </body>
 </html>
