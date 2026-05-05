@@ -28,6 +28,39 @@
     return table.reduce((closest, row) => Math.abs(row.weightG - weightG) < Math.abs(closest.weightG - weightG) ? row : closest, table[0]);
   }
 
+  function feedingBounds(weightG) {
+    if (weightG <= growOutTable[0].weightG) return [growOutTable[0], growOutTable[0]];
+    for (let index = 1; index < growOutTable.length; index += 1) {
+      if (weightG <= growOutTable[index].weightG) return [growOutTable[index - 1], growOutTable[index]];
+    }
+    const last = growOutTable[growOutTable.length - 1];
+    return [last, last];
+  }
+
+  function interpolatedFeedPercent(weightG) {
+    const [lower, upper] = feedingBounds(weightG);
+    if (lower === upper) return lower.feedPercent;
+    const span = upper.weightG - lower.weightG;
+    const ratio = span > 0 ? (weightG - lower.weightG) / span : 0;
+    return lower.feedPercent + (upper.feedPercent - lower.feedPercent) * ratio;
+  }
+
+  function projectedFeedToTarget(stock, targetWeightG) {
+    let biomassKg = stock.biomassKg;
+    let avgG = averageWeightG(stock);
+    let totalFeedKg = 0;
+    let days = 0;
+    while (avgG < targetWeightG && days < 2000 && stock.count > 0) {
+      const feedPercent = interpolatedFeedPercent(avgG);
+      const dailyFeedKg = biomassKg * feedPercent / 100;
+      totalFeedKg += dailyFeedKg;
+      biomassKg += dailyFeedKg * feedConversion(stock);
+      avgG = (biomassKg * 1000) / stock.count;
+      days += 1;
+    }
+    return { feedKg: totalFeedKg, days, finalAvgG: avgG };
+  }
+
   function sortDepth(stock) {
     let depth = 0;
     let current = stock;
@@ -44,8 +77,8 @@
     return sortingStages[sortDepth(stock)] || null;
   }
 
-  function specialProFeedSize(weightG) {
-    if (weightG < 305) return "SPECIAL PRO 3.0 mm";
+  function specialProFeedSize(row, weightG) {
+    if (weightG < 305) return `${row.feedSize} mm`;
     if (weightG < 372) return "SPECIAL PRO 3.0 + 4.5 mm, 1:1";
     return "SPECIAL PRO 4.5 mm";
   }
@@ -55,9 +88,9 @@
     if (!stage) return "Alle definierten Sortierstufen sind erreicht; naechstes Ziel kann Schlachtung oder ein individuelles Zielgewicht sein.";
     const avg = averageWeightG(stock);
     if (avg >= stage.weightG) return `${stage.label} empfohlen: aktuelles Gewicht ${formatG.format(avg)} g liegt bei/ueber ${formatG.format(stage.weightG)} g.`;
-    const feedToTargetKg = feedNeededKg(stock, stage.weightG);
-    const daysText = dailyFeedKg > 0 ? `, rechnerisch ca. ${Math.ceil(feedToTargetKg / dailyFeedKg)} Tage bei dieser Tagesgabe` : "";
-    return `Naechstes Sortierziel: ${stage.label} bei ${formatG.format(stage.weightG)} g. Bis dorthin ca. ${formatKg.format(feedToTargetKg)} kg Futterbedarf${daysText}.`;
+    const projection = projectedFeedToTarget(stock, stage.weightG);
+    const currentDailyText = dailyFeedKg > 0 ? ` Aktuelle Tagesgabe: ${formatKg.format(dailyFeedKg)} kg.` : "";
+    return `Naechstes Sortierziel: ${stage.label} bei ${formatG.format(stage.weightG)} g. Bis dorthin ca. ${formatKg.format(projection.feedKg)} kg Futterbedarf ueber ca. ${projection.days} Tage mit sinkendem Tabellen-Prozentsatz.${currentDailyText}`;
   }
 
   function adviceFor(stock) {
@@ -68,7 +101,7 @@
       return { mode: "Fry-Protokoll", row, feedPercent, feedKg: stock.biomassKg * feedPercent / 100, note: "Richtwert nahe Saettigung; laut Tabelle idealerweise auf 6 Futtergaben pro Tag verteilen." };
     }
     const row = closestByWeight(growOutTable, avg);
-    return { mode: "Grow-out", row, feedPercent: row.feedPercent, feedKg: stock.biomassKg * row.feedPercent / 100, feedSize: specialProFeedSize(avg), note: "Richtwert fuer optimale Wasserqualitaet und 26-28 °C." };
+    return { mode: "Grow-out", row, feedPercent: row.feedPercent, feedKg: stock.biomassKg * row.feedPercent / 100, feedSize: specialProFeedSize(row, avg), note: "Richtwert fuer optimale Wasserqualitaet und 26-28 °C." };
   }
 
   function populateAdviceSelect() {
@@ -99,7 +132,12 @@
   }
 
   const baseTargetWeightFor = targetWeightFor;
+  const baseFeedNeededKg = feedNeededKg;
   targetWeightFor = (stock) => nextSortingStage(stock)?.weightG || baseTargetWeightFor(stock);
+  feedNeededKg = (stock, targetG = targetWeightFor(stock)) => {
+    if (!stock || targetG <= averageWeightG(stock)) return baseFeedNeededKg(stock, targetG);
+    return projectedFeedToTarget(stock, targetG).feedKg;
+  };
 
   function syncUi() {
     populateAdviceSelect();
