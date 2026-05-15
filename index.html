@@ -61,6 +61,40 @@
         </div>
       </section>
 
+      <section class="panel wide">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Haelterung</p>
+            <h2>Haelterung & Schlachtung</h2>
+          </div>
+          <p>Nur Haelterbecken mit empfohlener Haelterzeit von 24 Stunden und Entnahme fuer die Schlachtung.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Becken</th>
+                <th>Charge</th>
+                <th>Stueck</th>
+                <th>Ø Gewicht</th>
+                <th>Biomasse</th>
+                <th>Haelterung seit</th>
+                <th>Entnahme ab</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="holdingRows"></tbody>
+          </table>
+        </div>
+        <form class="inline-form" id="holdingHarvestForm">
+          <label>Bestand <select name="holdingStockId" required></select></label>
+          <label>Datum <input name="date" type="date" required /></label>
+          <label>Stueckzahl <input name="count" type="number" min="1" required /></label>
+          <label>Schlachtgewicht je Fisch (g) <input name="avgWeight" type="number" min="0.1" step="0.1" placeholder="leer = berechnet" /></label>
+          <button type="submit">Entnahme buchen</button>
+        </form>
+      </section>
+
       <section class="grid two">
         <form class="panel form-card" id="batchForm">
           <div class="section-heading compact">

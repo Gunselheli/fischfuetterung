@@ -2,6 +2,8 @@ const STORAGE_KEY = "fischfuetterung-state-v1";
 const ADMIN_PASSWORD = "1111";
 const TANK_TYPES = ["Aufzuchtbecken", "Vorsteckbecken", "Mastbecken", "Haelterbecken"];
 const TANK_AREAS = ["Aufzuchtanlage", "Mastanlage"];
+const HOLDING_TANK_TYPE = "Haelterbecken";
+const HOLDING_HOURS = 24;
 
 const today = () => new Date().toISOString().slice(0, 10);
 const uid = (prefix) => {
@@ -40,6 +42,7 @@ const forms = {
   feeding: document.querySelector("#feedingForm"),
   sorting: document.querySelector("#sortingForm"),
   harvest: document.querySelector("#harvestForm"),
+  holdingHarvest: document.querySelector("#holdingHarvestForm"),
   target: document.querySelector("#targetForm"),
   correction: document.querySelector("#correctionForm")
 };
@@ -47,6 +50,7 @@ const forms = {
 const els = {
   metrics: document.querySelector("#metrics"),
   stockRows: document.querySelector("#stockRows"),
+  holdingRows: document.querySelector("#holdingRows"),
   timeline: document.querySelector("#timeline"),
   splitTargets: document.querySelector("#splitTargets"),
   splitTargetTemplate: document.querySelector("#splitTargetTemplate"),
@@ -258,6 +262,16 @@ function activeStocks() {
   return state.stocks.filter((stock) => stock.count > 0 && !stock.closedAt);
 }
 
+function holdingStocks() {
+  return activeStocks()
+    .filter((stock) => tankTypeLabel(tankById(stock.tankId)) === HOLDING_TANK_TYPE)
+    .sort((a, b) => {
+      const tankA = tankById(a.tankId);
+      const tankB = tankById(b.tankId);
+      return `${tankA?.area || ""}${tankA?.name || ""}`.localeCompare(`${tankB?.area || ""}${tankB?.name || ""}`);
+    });
+}
+
 function averageWeightG(stock) {
   if (!stock || stock.count <= 0) return 0;
   return (stock.biomassKg * 1000) / stock.count;
@@ -297,6 +311,29 @@ function sortingDateLabel(stock, targetG = targetWeightFor(stock)) {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return `${date.toISOString().slice(0, 10)} (${days} Tage)`;
+}
+
+function stockStartDate(stock) {
+  const raw = stock?.createdAt || today();
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00`) : new Date(raw);
+  return Number.isNaN(date.getTime()) ? new Date(`${today()}T00:00:00`) : date;
+}
+
+function formatDateTime(date) {
+  return `${date.toLocaleDateString("de-AT")} ${date.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function holdingReadyDate(stock) {
+  const date = stockStartDate(stock);
+  date.setHours(date.getHours() + HOLDING_HOURS);
+  return date;
+}
+
+function holdingStatus(stock) {
+  const readyAt = holdingReadyDate(stock);
+  const diffMs = readyAt.getTime() - Date.now();
+  if (diffMs <= 0) return "bereit";
+  return `${Math.ceil(diffMs / 3600000)} h offen`;
 }
 
 function stockLabel(stock) {
@@ -403,6 +440,10 @@ function updateSelects() {
   document
     .querySelectorAll('select[name="stockId"], select[name="sourceStockId"]')
     .forEach((select) => populateSelect(select, activeStocks(), stockLabel));
+
+  document
+    .querySelectorAll('select[name="holdingStockId"]')
+    .forEach((select) => populateSelect(select, holdingStocks(), stockLabel, "Haelterbestand waehlen"));
 
   updateCorrectionSelect();
 }
@@ -540,6 +581,37 @@ function renderStockRows() {
     .join("");
 }
 
+function renderHoldingRows() {
+  const stocks = holdingStocks();
+
+  if (stocks.length === 0) {
+    els.holdingRows.innerHTML = `<tr><td colspan="8" class="empty">Keine aktiven Bestaende in Haelterbecken vorhanden.</td></tr>`;
+    return;
+  }
+
+  els.holdingRows.innerHTML = stocks
+    .map((stock) => {
+      const batch = batchById(stock.batchId);
+      const tank = tankById(stock.tankId);
+      const avg = averageWeightG(stock);
+      const readyAt = holdingReadyDate(stock);
+
+      return `
+        <tr>
+          <td><strong>${tank?.name || "Unbekannt"}</strong><span class="muted">${tank?.area || "Aufzuchtanlage"} | ${tankTypeLabel(tank)}${tank?.note ? ` | ${tank.note}` : ""}</span></td>
+          <td><strong>${batchDisplayNumber(batch)}</strong><span class="muted">${batch?.supplier || "Lieferant unbekannt"}${batch?.date ? ` | ${batch.date}` : ""}</span></td>
+          <td>${formatInt.format(stock.count)}</td>
+          <td><span class="pill">${formatG.format(avg)} g</span></td>
+          <td>${formatKg.format(stock.biomassKg)} kg</td>
+          <td>${formatDateTime(stockStartDate(stock))}</td>
+          <td>${formatDateTime(readyAt)}</td>
+          <td><span class="pill">${holdingStatus(stock)}</span></td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
 function renderTimeline() {
   const events = [
     ...state.feedings.map((feeding) => ({
@@ -582,6 +654,7 @@ function render() {
   updateSelects();
   renderMetrics();
   renderStockRows();
+  renderHoldingRows();
   renderTimeline();
   setDefaultDates();
   saveState();
@@ -794,10 +867,9 @@ forms.sorting.addEventListener("submit", (event) => {
   render();
 });
 
-forms.harvest.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const data = new FormData(forms.harvest);
-  const stock = stockById(data.get("stockId"));
+function recordHarvest(form, stockFieldName = "stockId") {
+  const data = new FormData(form);
+  const stock = stockById(data.get(stockFieldName));
   if (!stock) return;
 
   const count = Math.round(toNumber(data.get("count")));
@@ -830,7 +902,20 @@ forms.harvest.addEventListener("submit", (event) => {
     createdAt: new Date().toISOString()
   });
 
+  return true;
+}
+
+forms.harvest.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!recordHarvest(forms.harvest)) return;
   forms.harvest.reset();
+  render();
+});
+
+forms.holdingHarvest?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!recordHarvest(forms.holdingHarvest, "holdingStockId")) return;
+  forms.holdingHarvest.reset();
   render();
 });
 

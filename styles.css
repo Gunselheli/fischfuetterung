@@ -363,6 +363,14 @@ td strong {
   gap: 0.9rem;
 }
 
+.inline-form {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+  align-items: end;
+}
+
 .correction-fields {
   display: grid;
   gap: 0.9rem;
@@ -415,6 +423,7 @@ td strong {
 @media (max-width: 1020px) {
   .metrics,
   .grid.two,
+  .inline-form,
   .split-grid {
     grid-template-columns: 1fr;
   }
