@@ -690,7 +690,7 @@ els.importData.addEventListener("change", async (event) => {
 els.resetData.addEventListener("click", () => {
   if (!confirmAdminPassword("Zuruecksetzen")) return;
   if (!confirm("Alle lokalen Daten zuruecksetzen?")) return;
-  state = seedState();
+  state = emptyState();
   render();
 });
 
