@@ -1,6 +1,7 @@
 const STORAGE_KEY = "fischfuetterung-state-v1";
 const ADMIN_PASSWORD = "1111";
 const TANK_TYPES = ["Aufzuchtbecken", "Vorsteckbecken", "Mastbecken", "Haelterbecken"];
+const TANK_AREAS = ["Aufzuchtanlage", "Mastanlage"];
 
 const today = () => new Date().toISOString().slice(0, 10);
 const uid = (prefix) => {
@@ -11,6 +12,11 @@ const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
+const escapeAttr = (value) =>
+  String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;");
 
 const formatInt = new Intl.NumberFormat("de-AT", { maximumFractionDigits: 0 });
 const formatKg = new Intl.NumberFormat("de-AT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -34,7 +40,8 @@ const forms = {
   feeding: document.querySelector("#feedingForm"),
   sorting: document.querySelector("#sortingForm"),
   harvest: document.querySelector("#harvestForm"),
-  target: document.querySelector("#targetForm")
+  target: document.querySelector("#targetForm"),
+  correction: document.querySelector("#correctionForm")
 };
 
 const els = {
@@ -44,6 +51,7 @@ const els = {
   splitTargets: document.querySelector("#splitTargets"),
   splitTargetTemplate: document.querySelector("#splitTargetTemplate"),
   targetResult: document.querySelector("#targetResult"),
+  correctionFields: document.querySelector("#correctionFields"),
   exportData: document.querySelector("#exportData"),
   importDataButton: document.querySelector("#importDataButton"),
   importData: document.querySelector("#importData"),
@@ -70,11 +78,19 @@ function normalizeTankType(tank) {
   return "Aufzuchtbecken";
 }
 
+function normalizeTankArea(tank) {
+  if (TANK_AREAS.includes(tank.area)) return tank.area;
+  const text = `${tank.name || ""} ${tank.note || ""} ${tank.type || ""}`.toLowerCase();
+  if (text.includes("mast")) return "Mastanlage";
+  return "Aufzuchtanlage";
+}
+
 function normalizeState(candidate) {
   const next = { ...emptyState(), ...(candidate || {}) };
 
   next.tanks = next.tanks.map((tank) => ({
     ...tank,
+    area: normalizeTankArea(tank),
     type: normalizeTankType(tank),
     volume: toNumber(tank.volume),
     note: tank.note || ""
@@ -139,8 +155,8 @@ function seedState() {
       }
     ],
     tanks: [
-      { id: tankA, name: "B-01", type: "Aufzuchtbecken", volume: 18, note: "Anzucht", createdAt: new Date().toISOString() },
-      { id: tankB, name: "B-02", type: "Aufzuchtbecken", volume: 18, note: "Anzucht", createdAt: new Date().toISOString() }
+      { id: tankA, name: "B-01", area: "Aufzuchtanlage", type: "Aufzuchtbecken", volume: 18, note: "Anzucht", createdAt: new Date().toISOString() },
+      { id: tankB, name: "B-02", area: "Aufzuchtanlage", type: "Aufzuchtbecken", volume: 18, note: "Anzucht", createdAt: new Date().toISOString() }
     ],
     stocks: [
       createStock({
@@ -252,6 +268,21 @@ function feedPerDayKg(stock) {
   return 0;
 }
 
+function projectedDaysToTarget(stock, targetG = targetWeightFor(stock)) {
+  const dailyFeedKg = feedPerDayKg(stock);
+  if (!stock || stock.count <= 0 || dailyFeedKg <= 0 || targetG <= averageWeightG(stock)) return 0;
+  return Math.ceil(feedNeededKg(stock, targetG) / dailyFeedKg);
+}
+
+function sortingDateLabel(stock, targetG = targetWeightFor(stock)) {
+  if (!stock || targetG >= 1500) return "-";
+  const days = projectedDaysToTarget(stock, targetG);
+  if (days <= 0) return "jetzt";
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return `${date.toISOString().slice(0, 10)} (${days} Tage)`;
+}
+
 function stockLabel(stock) {
   const batch = batchById(stock.batchId);
   const tank = tankById(stock.tankId);
@@ -345,13 +376,87 @@ function updateSelects() {
     );
   });
 
-  document.querySelectorAll('select[name="tankId"], select[name="targetTankId"]').forEach((select) => {
-    populateSelect(select, state.tanks, (tank) => `${tank.name} | ${tankTypeLabel(tank)}${tank.volume ? ` | ${tank.volume} m3` : ""}`);
+  document.querySelectorAll('select[name="tankId"], select[name="targetTankId"], select[name="correctionTankId"]').forEach((select) => {
+    populateSelect(select, state.tanks, (tank) => `${tank.area} | ${tank.name} | ${tankTypeLabel(tank)}${tank.volume ? ` | ${tank.volume} m3` : ""}`);
   });
 
   document
     .querySelectorAll('select[name="stockId"], select[name="sourceStockId"]')
     .forEach((select) => populateSelect(select, activeStocks(), stockLabel));
+
+  updateCorrectionSelect();
+}
+
+function correctionItems(type) {
+  if (type === "batch") return state.batches;
+  if (type === "tank") return state.tanks;
+  if (type === "stock") return activeStocks();
+  return [];
+}
+
+function correctionLabel(type, item) {
+  if (type === "batch") return `${item.supplier} | ${item.date} | ${formatInt.format(item.count)} Stk`;
+  if (type === "tank") return `${item.area} | ${item.name} | ${tankTypeLabel(item)}`;
+  return stockLabel(item);
+}
+
+function updateCorrectionSelect() {
+  if (!forms.correction) return;
+  const type = forms.correction.elements.correctionType.value;
+  const select = forms.correction.elements.correctionId;
+  populateSelect(select, correctionItems(type), (item) => correctionLabel(type, item), "Eintrag waehlen");
+  renderCorrectionFields();
+}
+
+function renderCorrectionFields() {
+  if (!forms.correction || !els.correctionFields) return;
+  const type = forms.correction.elements.correctionType.value;
+  const id = forms.correction.elements.correctionId.value;
+  const item = correctionItems(type).find((candidate) => candidate.id === id);
+
+  if (!item) {
+    els.correctionFields.innerHTML = `<div class="empty">Kein Eintrag ausgewaehlt.</div>`;
+    return;
+  }
+
+  if (type === "batch") {
+    els.correctionFields.innerHTML = `
+      <label>Lieferant <input name="correctionSupplier" value="${escapeAttr(item.supplier)}" required /></label>
+      <label>Lieferdatum <input name="correctionDate" type="date" value="${item.date || today()}" required /></label>
+      <label>Stueckzahl <input name="correctionCount" type="number" min="0" step="1" value="${item.count || 0}" required /></label>
+      <label>Startgewicht je Fisch (g) <input name="correctionAvgWeight" type="number" min="0" step="0.1" value="${item.avgWeightG || 0}" required /></label>
+      <label>Futtercodex <input name="correctionFeedConversion" type="number" min="0.1" step="0.1" value="${item.feedConversion || 1}" required /></label>
+    `;
+    return;
+  }
+
+  if (type === "tank") {
+    els.correctionFields.innerHTML = `
+      <label>Beckenname <input name="correctionName" value="${escapeAttr(item.name)}" required /></label>
+      <label>Anlage/Bereich
+        <select name="correctionArea">${TANK_AREAS.map((area) => `<option value="${area}" ${item.area === area ? "selected" : ""}>${area}</option>`).join("")}</select>
+      </label>
+      <label>Beckentyp
+        <select name="correctionTankType">${TANK_TYPES.map((typeName) => `<option value="${typeName}" ${item.type === typeName ? "selected" : ""}>${typeName}</option>`).join("")}</select>
+      </label>
+      <label>Volumen (m3) <input name="correctionVolume" type="number" min="0" step="0.1" value="${item.volume || 0}" /></label>
+      <label>Notiz <input name="correctionNote" value="${escapeAttr(item.note)}" /></label>
+    `;
+    return;
+  }
+
+  const avg = averageWeightG(item);
+  els.correctionFields.innerHTML = `
+    <label>Becken <select name="correctionTankId" required></select></label>
+    <label>Stueckzahl <input name="correctionStockCount" type="number" min="0" step="1" value="${item.count || 0}" required /></label>
+    <label>Durchschnittsgewicht (g) <input name="correctionStockAvgWeight" type="number" min="0" step="0.1" value="${avg.toFixed(1)}" required /></label>
+    <label>Futter gesamt (kg) <input name="correctionStockFeedKg" type="number" min="0" step="0.01" value="${item.feedKg || 0}" /></label>
+    <label>Mortalitaet (Stueck) <input name="correctionStockMortality" type="number" min="0" step="1" value="${item.mortality || 0}" /></label>
+    <label>Mortalitaet Gewicht (kg) <input name="correctionStockMortalityKg" type="number" min="0" step="0.01" value="${item.mortalityWeightKg || 0}" /></label>
+  `;
+  const tankSelect = els.correctionFields.querySelector('[name="correctionTankId"]');
+  populateSelect(tankSelect, state.tanks, (tank) => `${tank.area} | ${tank.name} | ${tankTypeLabel(tank)}`);
+  tankSelect.value = item.tankId;
 }
 
 function renderMetrics() {
@@ -377,10 +482,14 @@ function renderMetrics() {
 }
 
 function renderStockRows() {
-  const stocks = activeStocks().sort((a, b) => (tankById(a.tankId)?.name || "").localeCompare(tankById(b.tankId)?.name || ""));
+  const stocks = activeStocks().sort((a, b) => {
+    const tankA = tankById(a.tankId);
+    const tankB = tankById(b.tankId);
+    return `${tankA?.area || ""}${tankA?.name || ""}`.localeCompare(`${tankB?.area || ""}${tankB?.name || ""}`);
+  });
 
   if (stocks.length === 0) {
-    els.stockRows.innerHTML = `<tr><td colspan="9" class="empty">Keine aktiven Bestaende vorhanden.</td></tr>`;
+    els.stockRows.innerHTML = `<tr><td colspan="10" class="empty">Keine aktiven Bestaende vorhanden.</td></tr>`;
     return;
   }
 
@@ -394,7 +503,7 @@ function renderStockRows() {
 
       return `
         <tr>
-          <td><strong>${tank?.name || "Unbekannt"}</strong><span class="muted">${tankTypeLabel(tank)}${tank?.note ? ` | ${tank.note}` : ""}</span></td>
+          <td><strong>${tank?.name || "Unbekannt"}</strong><span class="muted">${tank?.area || "Aufzuchtanlage"} | ${tankTypeLabel(tank)}${tank?.note ? ` | ${tank.note}` : ""}</span></td>
           <td><strong>${batch?.supplier || "Unbekannt"}</strong><span class="muted">${batch?.date || ""}</span></td>
           <td>${formatInt.format(stock.count)}</td>
           <td><span class="pill">${formatG.format(avg)} g</span><span class="muted">Start: ${formatG.format(stock.initialAvgWeightG)} g</span></td>
@@ -402,6 +511,7 @@ function renderStockRows() {
           <td>${formatKg.format(stock.feedKg)} kg</td>
           <td>${formatInt.format(stock.mortality)} <span class="muted">(${mortalityRate.toFixed(1)} %, ${formatKg.format(stock.mortalityWeightKg)} kg)</span></td>
           <td>${formatG.format(target)} g <span class="muted">${target >= 1500 ? "Schlachtung" : "Sortierung"}</span></td>
+          <td>${sortingDateLabel(stock, target)}</td>
           <td>${formatKg.format(feedPerDayKg(stock))} kg</td>
         </tr>
       `;
@@ -522,6 +632,7 @@ forms.tank.addEventListener("submit", (event) => {
   state.tanks.push({
     id: uid("tank"),
     name: data.get("name").trim(),
+    area: data.get("area"),
     type: data.get("type"),
     volume: toNumber(data.get("volume")),
     note: data.get("note").trim(),
@@ -700,6 +811,54 @@ forms.harvest.addEventListener("submit", (event) => {
   forms.harvest.reset();
   render();
 });
+
+forms.correction?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!confirmAdminPassword("Korrektur")) return;
+
+  const data = new FormData(forms.correction);
+  const type = data.get("correctionType");
+  const id = data.get("correctionId");
+
+  if (type === "batch") {
+    const batch = batchById(id);
+    if (!batch) return;
+    batch.supplier = data.get("correctionSupplier").trim();
+    batch.date = data.get("correctionDate");
+    batch.count = Math.max(0, Math.round(toNumber(data.get("correctionCount"))));
+    batch.avgWeightG = Math.max(0, toNumber(data.get("correctionAvgWeight")));
+    batch.feedConversion = Math.max(0.1, toNumber(data.get("correctionFeedConversion"), 1));
+  }
+
+  if (type === "tank") {
+    const tank = tankById(id);
+    if (!tank) return;
+    tank.name = data.get("correctionName").trim();
+    tank.area = data.get("correctionArea");
+    tank.type = data.get("correctionTankType");
+    tank.volume = Math.max(0, toNumber(data.get("correctionVolume")));
+    tank.note = data.get("correctionNote").trim();
+  }
+
+  if (type === "stock") {
+    const stock = stockById(id);
+    if (!stock) return;
+    const count = Math.max(0, Math.round(toNumber(data.get("correctionStockCount"))));
+    const avgWeightG = Math.max(0, toNumber(data.get("correctionStockAvgWeight")));
+    stock.tankId = data.get("correctionTankId");
+    stock.count = count;
+    stock.biomassKg = (count * avgWeightG) / 1000;
+    stock.feedKg = Math.max(0, toNumber(data.get("correctionStockFeedKg")));
+    stock.mortality = Math.max(0, Math.round(toNumber(data.get("correctionStockMortality"))));
+    stock.mortalityWeightKg = Math.max(0, toNumber(data.get("correctionStockMortalityKg")));
+    stock.closedAt = count <= 0 ? today() : null;
+  }
+
+  render();
+});
+
+forms.correction?.elements.correctionType.addEventListener("change", updateCorrectionSelect);
+forms.correction?.elements.correctionId.addEventListener("change", renderCorrectionFields);
 
 forms.target.addEventListener("submit", (event) => {
   event.preventDefault();

@@ -278,6 +278,10 @@
     if (!stock) return 0;
     return adviceFor(stock).feedKg;
   };
+  projectedDaysToTarget = (stock, targetG = targetWeightFor(stock)) => {
+    if (!stock || targetG <= averageWeightG(stock)) return 0;
+    return projectedFeedToTarget(stock, targetG).days;
+  };
 
   function syncUi() {
     populateAdviceSelect();

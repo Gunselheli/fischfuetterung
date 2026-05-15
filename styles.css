@@ -284,7 +284,7 @@ select:focus {
 
 table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1120px;
   border-collapse: collapse;
 }
 
@@ -359,6 +359,11 @@ td strong {
 }
 
 .target-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.correction-fields {
   display: grid;
   gap: 0.9rem;
 }

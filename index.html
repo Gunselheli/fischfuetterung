@@ -52,6 +52,7 @@
                 <th>Futter gesamt</th>
                 <th>Mortalitaet</th>
                 <th>Naechstes Ziel</th>
+                <th>Sortierdatum</th>
                 <th>Futterbedarf/Tag</th>
               </tr>
             </thead>
@@ -87,6 +88,12 @@
             </div>
           </div>
           <label>Beckenname <input name="name" required placeholder="z. B. B-01" /></label>
+          <label>Anlage/Bereich
+            <select name="area" required>
+              <option value="Aufzuchtanlage">Aufzuchtanlage</option>
+              <option value="Mastanlage">Mastanlage</option>
+            </select>
+          </label>
           <label>Beckentyp
             <select name="type" required>
               <option value="Aufzuchtbecken">Aufzuchtbecken</option>
@@ -199,6 +206,27 @@
             <button type="submit">Futterbedarf berechnen</button>
           </form>
           <div class="result-card" id="targetResult">Noch keine Berechnung.</div>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Korrektur</p>
+              <h2>Falscheingaben bearbeiten</h2>
+            </div>
+          </div>
+          <form class="target-form" id="correctionForm">
+            <label>Bereich
+              <select name="correctionType">
+                <option value="batch">Charge</option>
+                <option value="tank">Becken</option>
+                <option value="stock">Aktiver Bestand</option>
+              </select>
+            </label>
+            <label>Eintrag <select name="correctionId" required></select></label>
+            <div class="correction-fields" id="correctionFields"></div>
+            <button type="submit">Aenderung speichern</button>
+          </form>
         </section>
 
         <section class="panel">
