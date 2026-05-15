@@ -85,8 +85,23 @@ function normalizeTankArea(tank) {
   return "Aufzuchtanlage";
 }
 
+function normalizeBatchNumber(batch, index) {
+  const value = batch.number || batch.batchNumber || batch.chargeNumber;
+  if (String(value || "").trim()) return String(value).trim();
+  return `CH-${String(index + 1).padStart(3, "0")}`;
+}
+
 function normalizeState(candidate) {
   const next = { ...emptyState(), ...(candidate || {}) };
+
+  next.batches = next.batches.map((batch, index) => ({
+    ...batch,
+    number: normalizeBatchNumber(batch, index),
+    supplier: batch.supplier || "",
+    count: Math.max(0, Math.round(toNumber(batch.count))),
+    avgWeightG: Math.max(0, toNumber(batch.avgWeightG)),
+    feedConversion: Math.max(0.1, toNumber(batch.feedConversion, 1))
+  }));
 
   next.tanks = next.tanks.map((tank) => ({
     ...tank,
@@ -146,6 +161,7 @@ function seedState() {
     batches: [
       {
         id: batchId,
+        number: "CH-001",
         supplier: "Beispiel Lieferant",
         date: today(),
         count: 4200,
@@ -286,12 +302,16 @@ function sortingDateLabel(stock, targetG = targetWeightFor(stock)) {
 function stockLabel(stock) {
   const batch = batchById(stock.batchId);
   const tank = tankById(stock.tankId);
-  return `${tank?.name || "Unbekannt"} | ${batch?.supplier || "Charge"} | ${formatInt.format(stock.count)} Stk | ${formatG.format(averageWeightG(stock))} g`;
+  return `${tank?.name || "Unbekannt"} | ${batchDisplayNumber(batch)} | ${batch?.supplier || "Lieferant unbekannt"} | ${formatInt.format(stock.count)} Stk | ${formatG.format(averageWeightG(stock))} g`;
 }
 
 function supplierNames() {
   return [...new Set(state.batches.map((batch) => batch.supplier?.trim()).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "de-AT"));
+}
+
+function batchDisplayNumber(batch) {
+  return batch?.number || "Charge unbekannt";
 }
 
 function setDefaultDates() {
@@ -372,7 +392,7 @@ function updateSelects() {
     populateSelect(
       select,
       state.batches,
-      (batch) => `${batch.supplier} | ${batch.date} | ${formatInt.format(batch.count)} Stk`
+      (batch) => `${batchDisplayNumber(batch)} | ${batch.supplier} | ${batch.date} | ${formatInt.format(batch.count)} Stk`
     );
   });
 
@@ -395,7 +415,7 @@ function correctionItems(type) {
 }
 
 function correctionLabel(type, item) {
-  if (type === "batch") return `${item.supplier} | ${item.date} | ${formatInt.format(item.count)} Stk`;
+  if (type === "batch") return `${batchDisplayNumber(item)} | ${item.supplier} | ${item.date} | ${formatInt.format(item.count)} Stk`;
   if (type === "tank") return `${item.area} | ${item.name} | ${tankTypeLabel(item)}`;
   return stockLabel(item);
 }
@@ -421,6 +441,7 @@ function renderCorrectionFields() {
 
   if (type === "batch") {
     els.correctionFields.innerHTML = `
+      <label>Chargennummer <input name="correctionNumber" value="${escapeAttr(batchDisplayNumber(item))}" required /></label>
       <label>Lieferant <input name="correctionSupplier" value="${escapeAttr(item.supplier)}" required /></label>
       <label>Lieferdatum <input name="correctionDate" type="date" value="${item.date || today()}" required /></label>
       <label>Stueckzahl <input name="correctionCount" type="number" min="0" step="1" value="${item.count || 0}" required /></label>
@@ -504,7 +525,7 @@ function renderStockRows() {
       return `
         <tr>
           <td><strong>${tank?.name || "Unbekannt"}</strong><span class="muted">${tank?.area || "Aufzuchtanlage"} | ${tankTypeLabel(tank)}${tank?.note ? ` | ${tank.note}` : ""}</span></td>
-          <td><strong>${batch?.supplier || "Unbekannt"}</strong><span class="muted">${batch?.date || ""}</span></td>
+          <td><strong>${batchDisplayNumber(batch)}</strong><span class="muted">${batch?.supplier || "Lieferant unbekannt"}${batch?.date ? ` | ${batch.date}` : ""}</span></td>
           <td>${formatInt.format(stock.count)}</td>
           <td><span class="pill">${formatG.format(avg)} g</span><span class="muted">Start: ${formatG.format(stock.initialAvgWeightG)} g</span></td>
           <td>${formatKg.format(stock.biomassKg)} kg</td>
@@ -613,6 +634,7 @@ forms.batch.addEventListener("submit", (event) => {
 
   state.batches.push({
     id: uid("batch"),
+    number: data.get("number").trim(),
     supplier,
     date: data.get("date"),
     count: Math.round(toNumber(data.get("count"))),
@@ -823,6 +845,7 @@ forms.correction?.addEventListener("submit", (event) => {
   if (type === "batch") {
     const batch = batchById(id);
     if (!batch) return;
+    batch.number = data.get("correctionNumber").trim();
     batch.supplier = data.get("correctionSupplier").trim();
     batch.date = data.get("correctionDate");
     batch.count = Math.max(0, Math.round(toNumber(data.get("correctionCount"))));
