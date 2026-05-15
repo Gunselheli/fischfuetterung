@@ -149,9 +149,12 @@ function normalizeState(candidate) {
       mortality: Math.max(0, Math.round(toNumber(stock.mortality))),
       mortalityWeightKg: Math.max(0, toNumber(stock.mortalityWeightKg, fallbackMortalityWeightKg)),
       harvestedCount: Math.max(0, Math.round(toNumber(stock.harvestedCount))),
-      transferredOut: Math.max(0, Math.round(toNumber(stock.transferredOut)))
+      transferredOut: Math.max(0, Math.round(toNumber(stock.transferredOut))),
+      holdingStartedAt: stock.holdingStartedAt || null
     };
   });
+
+  next.stocks.forEach((stock) => setHoldingStartedAt(stock, stock.createdAt));
 
   return next;
 }
@@ -221,7 +224,17 @@ function confirmAdminPassword(actionLabel) {
   return true;
 }
 
-function createStock({ id = uid("stock"), batchId, tankId, count, avgWeightG, date, origin, parentStockId = null }) {
+function createStock({
+  id = uid("stock"),
+  batchId,
+  tankId,
+  count,
+  avgWeightG,
+  date,
+  origin,
+  parentStockId = null,
+  holdingStartedAt = null
+}) {
   const safeCount = Math.max(0, Math.round(toNumber(count)));
   const safeAvg = Math.max(0, toNumber(avgWeightG));
 
@@ -239,6 +252,7 @@ function createStock({ id = uid("stock"), batchId, tankId, count, avgWeightG, da
     harvestedCount: 0,
     transferredOut: 0,
     createdAt: date || today(),
+    holdingStartedAt,
     origin,
     parentStockId,
     closedAt: null
@@ -263,6 +277,13 @@ function stockById(id) {
 
 function activeStocks() {
   return state.stocks.filter((stock) => stock.count > 0 && !stock.closedAt);
+}
+
+function stockHoldingStartedAt(stock) {
+  if (!stock) return null;
+  if (stock.holdingStartedAt) return stock.holdingStartedAt;
+  const tank = tankById(stock.tankId);
+  return tankTypeLabel(tank) === HOLDING_TANK_TYPE ? stock.createdAt || today() : null;
 }
 
 function holdingStocks() {
@@ -317,7 +338,7 @@ function sortingDateLabel(stock, targetG = targetWeightFor(stock)) {
 }
 
 function stockStartDate(stock) {
-  const raw = stock?.createdAt || today();
+  const raw = stockHoldingStartedAt(stock) || stock?.createdAt || today();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00`) : new Date(raw);
   return Number.isNaN(date.getTime()) ? new Date(`${today()}T00:00:00`) : date;
 }
@@ -340,8 +361,29 @@ function holdingReadyDate(stock) {
 function holdingStatus(stock) {
   const readyAt = holdingReadyDate(stock);
   const diffMs = readyAt.getTime() - Date.now();
-  if (diffMs <= 0) return "bereit";
-  return `${Math.ceil(diffMs / 3600000)} h offen`;
+  if (diffMs <= 0) {
+    const overdueMs = Math.abs(diffMs);
+    return overdueMs > 60000 ? `bereit zur Entnahme, ${formatRemainingTime(overdueMs)} ueberfaellig` : "bereit zur Entnahme";
+  }
+  return `${formatRemainingTime(diffMs)} verbleibend`;
+}
+
+function formatRemainingTime(milliseconds) {
+  const totalMinutes = Math.max(0, Math.round(milliseconds / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes} min`;
+  if (minutes === 0) return `${hours} h`;
+  return `${hours} h ${minutes} min`;
+}
+
+function holdingElapsedLabel(milliseconds) {
+  const totalMinutes = Math.max(0, Math.round(milliseconds / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes} min`;
+  if (minutes === 0) return `${hours} h`;
+  return `${hours} h ${minutes} min`;
 }
 
 function stockLabel(stock) {
@@ -389,6 +431,15 @@ function annualOverviewData(year) {
   });
 
   return months;
+}
+
+function setHoldingStartedAt(stock, fallbackDate) {
+  const tank = tankById(stock.tankId);
+  if (tankTypeLabel(tank) === HOLDING_TANK_TYPE) {
+    stock.holdingStartedAt = stock.holdingStartedAt || fallbackDate || today();
+    return;
+  }
+  stock.holdingStartedAt = null;
 }
 
 function renderAnnualOverview() {
@@ -714,7 +765,13 @@ function renderTimeline() {
     ...state.harvests.map((harvest) => ({
       date: harvest.date,
       type: "Schlachtung",
-      text: `${harvest.stockLabel}: ${formatInt.format(harvest.count)} Fische, ${formatKg.format(harvest.weightKg)} kg`
+      text: `${harvest.stockLabel}: ${formatInt.format(harvest.count)} Fische, ${formatKg.format(harvest.weightKg)} kg${
+        harvest.holdingStartedAt && harvest.holdingEarly
+          ? `, vorzeitig nach ${holdingElapsedLabel(harvest.holdingElapsedMs)} entnommen`
+          : harvest.holdingStartedAt
+            ? `, nach ${holdingElapsedLabel(harvest.holdingElapsedMs)} Hälterung entnommen`
+            : ""
+      }`
     }))
   ].sort((a, b) => `${b.date}${b.type}`.localeCompare(`${a.date}${a.type}`));
 
@@ -835,7 +892,8 @@ forms.stocking.addEventListener("submit", (event) => {
       count: data.get("count"),
       avgWeightG: data.get("avgWeight"),
       date: data.get("date"),
-      origin: "Erstbesatz"
+      origin: "Erstbesatz",
+      holdingStartedAt: tankTypeLabel(tankById(data.get("tankId"))) === HOLDING_TANK_TYPE ? data.get("date") : null
     })
   );
   forms.stocking.reset();
@@ -930,7 +988,8 @@ forms.sorting.addEventListener("submit", (event) => {
       avgWeightG: target.avgWeightG,
       date,
       origin: "Sortierung",
-      parentStockId: source.id
+      parentStockId: source.id,
+      holdingStartedAt: tankTypeLabel(tankById(target.tankId)) === HOLDING_TANK_TYPE ? date : null
     })
   );
   state.stocks.push(...newStocks);
@@ -963,6 +1022,12 @@ function recordHarvest(form, stockFieldName = "stockId") {
   const count = Math.round(toNumber(data.get("count")));
   const date = data.get("date");
   const avgWeightG = toNumber(data.get("avgWeight"), averageWeightG(stock)) || averageWeightG(stock);
+  const holdingStartedAt = stockHoldingStartedAt(stock);
+  const holdingReadyAt = holdingStartedAt ? new Date(holdingStartedAt) : null;
+  if (holdingReadyAt) holdingReadyAt.setHours(holdingReadyAt.getHours() + HOLDING_HOURS);
+  const harvestDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00`) : new Date(date);
+  const holdingElapsedMs = holdingStartedAt ? harvestDate.getTime() - new Date(holdingStartedAt).getTime() : 0;
+  const holdingEarly = Boolean(holdingReadyAt && harvestDate.getTime() < holdingReadyAt.getTime());
 
   try {
     assertCapacity(stock, count, "Schlachtung");
@@ -987,6 +1052,10 @@ function recordHarvest(form, stockFieldName = "stockId") {
     count,
     avgWeightG,
     weightKg: slaughterWeightKg,
+    holdingStartedAt,
+    holdingReadyAt: holdingReadyAt ? holdingReadyAt.toISOString() : null,
+    holdingElapsedMs,
+    holdingEarly,
     createdAt: new Date().toISOString()
   });
 
@@ -1034,12 +1103,20 @@ forms.correction?.addEventListener("submit", (event) => {
     if (!stock) return;
     const count = Math.max(0, Math.round(toNumber(data.get("correctionStockCount"))));
     const avgWeightG = Math.max(0, toNumber(data.get("correctionStockAvgWeight")));
+    const oldTank = tankById(stock.tankId);
+    const nextTankId = data.get("correctionTankId");
+    const nextTank = tankById(nextTankId);
     stock.tankId = data.get("correctionTankId");
     stock.count = count;
     stock.biomassKg = (count * avgWeightG) / 1000;
     stock.feedKg = Math.max(0, toNumber(data.get("correctionStockFeedKg")));
     stock.mortality = Math.max(0, Math.round(toNumber(data.get("correctionStockMortality"))));
     stock.mortalityWeightKg = Math.max(0, toNumber(data.get("correctionStockMortalityKg")));
+    if (tankTypeLabel(nextTank) === HOLDING_TANK_TYPE) {
+      stock.holdingStartedAt = tankTypeLabel(oldTank) === HOLDING_TANK_TYPE ? stock.holdingStartedAt || today() : today();
+    } else {
+      stock.holdingStartedAt = null;
+    }
     stock.closedAt = count <= 0 ? today() : null;
   }
 
