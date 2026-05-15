@@ -422,6 +422,28 @@ function closeIfEmpty(stock, date) {
   }
 }
 
+function clearEnteredContent() {
+  Object.values(forms).forEach((form) => {
+    form?.querySelectorAll("input, select").forEach((control) => {
+      if (control.type === "number" && control.min === "0") {
+        control.value = "0";
+        return;
+      }
+      control.value = "";
+    });
+  });
+
+  els.splitTargets.innerHTML = "";
+  renderSplitTargets();
+  updateSelects();
+  els.targetResult.textContent = "Noch keine Berechnung.";
+
+  const adviceResult = document.querySelector("#feedingAdviceResult");
+  const applyButton = document.querySelector("#applyFeedingAdvice");
+  if (adviceResult) adviceResult.textContent = "Noch keine Empfehlung berechnet.";
+  if (applyButton) applyButton.disabled = true;
+}
+
 forms.batch.addEventListener("submit", (event) => {
   event.preventDefault();
   const data = new FormData(forms.batch);
@@ -692,6 +714,7 @@ els.resetData.addEventListener("click", () => {
   if (!confirm("Alle lokalen Daten zuruecksetzen?")) return;
   state = emptyState();
   render();
+  clearEnteredContent();
 });
 
 render();
