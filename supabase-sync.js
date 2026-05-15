@@ -42,7 +42,7 @@
   }
 
   function normalize(candidate) {
-    return { ...emptyState(), ...(candidate || {}) };
+    return normalizeState(candidate);
   }
 
   async function loadRemote() {

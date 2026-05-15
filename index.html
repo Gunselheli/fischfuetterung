@@ -5,21 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Fischfuetterung | Fischzucht Verwaltung</title>
     <link rel="stylesheet" href="styles.css" />
-    <style>
-      .secondary-button { margin-top: 0.8rem; background: var(--forest); }
-      button:disabled { cursor: not-allowed; opacity: 0.48; transform: none; }
-      .compact-table { margin-top: 1rem; max-height: 420px; border: 1px solid var(--line); border-radius: 18px; }
-      .compact-table table { min-width: 680px; }
-      .compact-table th { position: sticky; top: 0; background: rgba(247, 247, 240, 0.96); }
-      .source-note { color: var(--muted); font-size: 0.86rem; line-height: 1.45; }
-      .result-card strong { color: var(--water-dark); }
-    </style>
   </head>
   <body>
     <header class="hero">
       <nav class="topbar" aria-label="Hauptnavigation">
         <div class="brand-lockup">
-          <img class="brand-logo" src="assets/logo.svg" alt="Fischzucht Arnhof Waldviertel" />
+          <img class="brand-logo" src="assets/logo.png" alt="Fischzucht Arnhof Waldviertel" onerror="this.onerror=null;this.src='assets/logo.svg';" />
           <div>
             <p class="eyebrow">Fischzucht Arnhof Waldviertel</p>
             <h1>Fischfuetterung & Bestand</h1>
@@ -27,10 +18,8 @@
         </div>
         <div class="topbar-actions">
           <button class="ghost-button" id="exportData" type="button">Export</button>
-          <label class="ghost-button file-button">
-            Import
-            <input id="importData" type="file" accept="application/json" />
-          </label>
+          <button class="ghost-button" id="importDataButton" type="button">Import</button>
+          <input id="importData" type="file" accept="application/json" />
           <button class="danger-button" id="resetData" type="button">Zuruecksetzen</button>
         </div>
       </nav>
@@ -95,6 +84,14 @@
             </div>
           </div>
           <label>Beckenname <input name="name" required placeholder="z. B. B-01" /></label>
+          <label>Beckentyp
+            <select name="type" required>
+              <option value="Aufzuchtbecken">Aufzuchtbecken</option>
+              <option value="Vorsteckbecken">Vorsteckbecken</option>
+              <option value="Mastbecken">Mastbecken</option>
+              <option value="Haelterbecken">H&auml;lterbecken</option>
+            </select>
+          </label>
           <label>Volumen (m³) <input name="volume" type="number" min="0" step="0.1" /></label>
           <label>Notiz <input name="note" placeholder="Halle, Kreislauf, Besonderheiten" /></label>
           <button type="submit">Becken speichern</button>

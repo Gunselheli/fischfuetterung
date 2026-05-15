@@ -1,8 +1,13 @@
 const STORAGE_KEY = "fischfuetterung-state-v1";
+const ADMIN_PASSWORD = "1111";
+const TANK_TYPES = ["Aufzuchtbecken", "Vorsteckbecken", "Mastbecken", "Haelterbecken"];
 
 const today = () => new Date().toISOString().slice(0, 10);
-const uid = (prefix) => `${prefix}-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
-const number = (value, fallback = 0) => {
+const uid = (prefix) => {
+  const random = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}-${random}`;
+};
+const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
@@ -40,6 +45,7 @@ const els = {
   splitTargetTemplate: document.querySelector("#splitTargetTemplate"),
   targetResult: document.querySelector("#targetResult"),
   exportData: document.querySelector("#exportData"),
+  importDataButton: document.querySelector("#importDataButton"),
   importData: document.querySelector("#importData"),
   resetData: document.querySelector("#resetData")
 };
@@ -49,20 +55,75 @@ function loadState() {
   if (!stored) return seedState();
 
   try {
-    return { ...emptyState(), ...JSON.parse(stored) };
+    return normalizeState(JSON.parse(stored));
   } catch {
     return seedState();
   }
 }
 
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+function normalizeTankType(tank) {
+  if (TANK_TYPES.includes(tank.type)) return tank.type;
+  const note = String(tank.note || "").toLowerCase();
+  if (note.includes("vorsteck")) return "Vorsteckbecken";
+  if (note.includes("mast")) return "Mastbecken";
+  if (note.includes("haelter") || note.includes("hälter")) return "Haelterbecken";
+  return "Aufzuchtbecken";
+}
+
+function normalizeState(candidate) {
+  const next = { ...emptyState(), ...(candidate || {}) };
+
+  next.tanks = next.tanks.map((tank) => ({
+    ...tank,
+    type: normalizeTankType(tank),
+    volume: toNumber(tank.volume),
+    note: tank.note || ""
+  }));
+
+  next.feedings = next.feedings.map((feeding) => {
+    const deadCount = Math.max(0, Math.round(toNumber(feeding.deadCount)));
+    const avgWeightGBefore = toNumber(feeding.avgWeightGBefore);
+    return {
+      ...feeding,
+      feedKg: Math.max(0, toNumber(feeding.feedKg)),
+      deadCount,
+      avgWeightGBefore,
+      mortalityWeightKg: Math.max(0, toNumber(feeding.mortalityWeightKg, (deadCount * avgWeightGBefore) / 1000))
+    };
+  });
+
+  next.stocks = next.stocks.map((stock) => {
+    const count = Math.max(0, Math.round(toNumber(stock.count)));
+    const initialCount = Math.max(0, Math.round(toNumber(stock.initialCount, count)));
+    const initialAvgWeightG = Math.max(0, toNumber(stock.initialAvgWeightG));
+    const fallbackBiomassKg = (count * initialAvgWeightG) / 1000;
+    const fallbackMortalityWeightKg = next.feedings
+      .filter((feeding) => feeding.stockId === stock.id)
+      .reduce((sum, feeding) => sum + feeding.mortalityWeightKg, 0);
+
+    return {
+      ...stock,
+      count,
+      initialCount,
+      initialAvgWeightG,
+      biomassKg: Math.max(0, toNumber(stock.biomassKg, fallbackBiomassKg)),
+      feedKg: Math.max(0, toNumber(stock.feedKg)),
+      mortality: Math.max(0, Math.round(toNumber(stock.mortality))),
+      mortalityWeightKg: Math.max(0, toNumber(stock.mortalityWeightKg, fallbackMortalityWeightKg)),
+      harvestedCount: Math.max(0, Math.round(toNumber(stock.harvestedCount))),
+      transferredOut: Math.max(0, Math.round(toNumber(stock.transferredOut)))
+    };
+  });
+
+  return next;
 }
 
 function seedState() {
   const batchId = uid("batch");
   const tankA = uid("tank");
   const tankB = uid("tank");
+  const stockA = uid("stock");
+  const stockB = uid("stock");
 
   return {
     ...emptyState(),
@@ -78,12 +139,28 @@ function seedState() {
       }
     ],
     tanks: [
-      { id: tankA, name: "B-01", volume: 18, note: "Anzucht", createdAt: new Date().toISOString() },
-      { id: tankB, name: "B-02", volume: 18, note: "Anzucht", createdAt: new Date().toISOString() }
+      { id: tankA, name: "B-01", type: "Aufzuchtbecken", volume: 18, note: "Anzucht", createdAt: new Date().toISOString() },
+      { id: tankB, name: "B-02", type: "Aufzuchtbecken", volume: 18, note: "Anzucht", createdAt: new Date().toISOString() }
     ],
     stocks: [
-      createStock({ batchId, tankId: tankA, count: 2100, avgWeightG: 18, date: today(), origin: "Erstbesatz" }),
-      createStock({ batchId, tankId: tankB, count: 2100, avgWeightG: 18, date: today(), origin: "Erstbesatz" })
+      createStock({
+        id: stockA,
+        batchId,
+        tankId: tankA,
+        count: 2100,
+        avgWeightG: 18,
+        date: today(),
+        origin: "Erstbesatz"
+      }),
+      createStock({
+        id: stockB,
+        batchId,
+        tankId: tankB,
+        count: 2100,
+        avgWeightG: 18,
+        date: today(),
+        origin: "Erstbesatz"
+      })
     ],
     feedings: [],
     sortings: [],
@@ -91,9 +168,23 @@ function seedState() {
   };
 }
 
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function confirmAdminPassword(actionLabel) {
+  const password = prompt(`${actionLabel}: Passwort eingeben`);
+  if (password === null) return false;
+  if (password !== ADMIN_PASSWORD) {
+    alert("Falsches Passwort.");
+    return false;
+  }
+  return true;
+}
+
 function createStock({ id = uid("stock"), batchId, tankId, count, avgWeightG, date, origin, parentStockId = null }) {
-  const safeCount = Math.max(0, Math.round(number(count)));
-  const safeAvg = Math.max(0, number(avgWeightG));
+  const safeCount = Math.max(0, Math.round(toNumber(count)));
+  const safeAvg = Math.max(0, toNumber(avgWeightG));
 
   return {
     id,
@@ -105,6 +196,7 @@ function createStock({ id = uid("stock"), batchId, tankId, count, avgWeightG, da
     biomassKg: (safeCount * safeAvg) / 1000,
     feedKg: 0,
     mortality: 0,
+    mortalityWeightKg: 0,
     harvestedCount: 0,
     transferredOut: 0,
     createdAt: date || today(),
@@ -114,12 +206,34 @@ function createStock({ id = uid("stock"), batchId, tankId, count, avgWeightG, da
   };
 }
 
-const batchById = (id) => state.batches.find((batch) => batch.id === id);
-const tankById = (id) => state.tanks.find((tank) => tank.id === id);
-const stockById = (id) => state.stocks.find((stock) => stock.id === id);
-const activeStocks = () => state.stocks.filter((stock) => stock.count > 0 && !stock.closedAt);
-const averageWeightG = (stock) => (stock && stock.count > 0 ? (stock.biomassKg * 1000) / stock.count : 0);
-const feedConversion = (stock) => batchById(stock.batchId)?.feedConversion || 1;
+function batchById(id) {
+  return state.batches.find((batch) => batch.id === id);
+}
+
+function tankById(id) {
+  return state.tanks.find((tank) => tank.id === id);
+}
+
+function tankTypeLabel(tank) {
+  return tank?.type || "Aufzuchtbecken";
+}
+
+function stockById(id) {
+  return state.stocks.find((stock) => stock.id === id);
+}
+
+function activeStocks() {
+  return state.stocks.filter((stock) => stock.count > 0 && !stock.closedAt);
+}
+
+function averageWeightG(stock) {
+  if (!stock || stock.count <= 0) return 0;
+  return (stock.biomassKg * 1000) / stock.count;
+}
+
+function feedConversion(stock) {
+  return batchById(stock.batchId)?.feedConversion || 1;
+}
 
 function targetWeightFor(stock) {
   const avg = averageWeightG(stock);
@@ -130,7 +244,8 @@ function targetWeightFor(stock) {
 
 function feedNeededKg(stock, targetG = targetWeightFor(stock)) {
   const targetBiomassKg = (stock.count * targetG) / 1000;
-  return Math.max(0, targetBiomassKg - stock.biomassKg) / feedConversion(stock);
+  const missingKg = Math.max(0, targetBiomassKg - stock.biomassKg);
+  return missingKg / feedConversion(stock);
 }
 
 function stockLabel(stock) {
@@ -139,10 +254,15 @@ function stockLabel(stock) {
   return `${tank?.name || "Unbekannt"} | ${batch?.supplier || "Charge"} | ${formatInt.format(stock.count)} Stk | ${formatG.format(averageWeightG(stock))} g`;
 }
 
+function setDefaultDates() {
+  document.querySelectorAll('input[type="date"]').forEach((input) => {
+    if (!input.value) input.value = today();
+  });
+}
+
 function populateSelect(select, items, getLabel, placeholder = "Bitte waehlen") {
   const current = select.value;
   select.innerHTML = "";
-
   const blank = document.createElement("option");
   blank.value = "";
   blank.textContent = placeholder;
@@ -170,16 +290,20 @@ function renderSplitTargets() {
 
 function updateSelects() {
   document.querySelectorAll('select[name="batchId"]').forEach((select) => {
-    populateSelect(select, state.batches, (batch) => `${batch.supplier} | ${batch.date} | ${formatInt.format(batch.count)} Stk`);
+    populateSelect(
+      select,
+      state.batches,
+      (batch) => `${batch.supplier} | ${batch.date} | ${formatInt.format(batch.count)} Stk`
+    );
   });
 
   document.querySelectorAll('select[name="tankId"], select[name="targetTankId"]').forEach((select) => {
-    populateSelect(select, state.tanks, (tank) => `${tank.name}${tank.volume ? ` | ${tank.volume} m³` : ""}`);
+    populateSelect(select, state.tanks, (tank) => `${tank.name} | ${tankTypeLabel(tank)}${tank.volume ? ` | ${tank.volume} m3` : ""}`);
   });
 
-  document.querySelectorAll('select[name="stockId"], select[name="sourceStockId"]').forEach((select) => {
-    populateSelect(select, activeStocks(), stockLabel);
-  });
+  document
+    .querySelectorAll('select[name="stockId"], select[name="sourceStockId"]')
+    .forEach((select) => populateSelect(select, activeStocks(), stockLabel));
 }
 
 function renderMetrics() {
@@ -188,15 +312,18 @@ function renderMetrics() {
   const totalBiomass = stocks.reduce((sum, stock) => sum + stock.biomassKg, 0);
   const totalFeed = state.stocks.reduce((sum, stock) => sum + stock.feedKg, 0);
   const totalMortality = state.stocks.reduce((sum, stock) => sum + stock.mortality, 0);
+  const totalMortalityWeight = state.stocks.reduce((sum, stock) => sum + stock.mortalityWeightKg, 0);
   const harvestedKg = state.harvests.reduce((sum, harvest) => sum + harvest.weightKg, 0);
 
-  els.metrics.innerHTML = [
+  const cards = [
     ["Aktive Fische", formatInt.format(totalFish), "Stueck in Becken"],
     ["Biomasse", `${formatKg.format(totalBiomass)} kg`, "berechnet"],
     ["Futter", `${formatKg.format(totalFeed)} kg`, "gesamt dokumentiert"],
-    ["Mortalitaet", formatInt.format(totalMortality), "entfernte Fische"],
+    ["Mortalitaet", formatInt.format(totalMortality), `${formatKg.format(totalMortalityWeight)} kg Verlust`],
     ["Schlachtgewicht", `${formatKg.format(harvestedKg)} kg`, "entnommen"]
-  ]
+  ];
+
+  els.metrics.innerHTML = cards
     .map(([label, value, helper]) => `<article class="metric-card"><span>${label}</span><strong>${value}</strong><span>${helper}</span></article>`)
     .join("");
 }
@@ -219,13 +346,13 @@ function renderStockRows() {
 
       return `
         <tr>
-          <td><strong>${tank?.name || "Unbekannt"}</strong><span class="muted">${tank?.note || ""}</span></td>
+          <td><strong>${tank?.name || "Unbekannt"}</strong><span class="muted">${tankTypeLabel(tank)}${tank?.note ? ` | ${tank.note}` : ""}</span></td>
           <td><strong>${batch?.supplier || "Unbekannt"}</strong><span class="muted">${batch?.date || ""}</span></td>
           <td>${formatInt.format(stock.count)}</td>
           <td><span class="pill">${formatG.format(avg)} g</span><span class="muted">Start: ${formatG.format(stock.initialAvgWeightG)} g</span></td>
           <td>${formatKg.format(stock.biomassKg)} kg</td>
           <td>${formatKg.format(stock.feedKg)} kg</td>
-          <td>${formatInt.format(stock.mortality)} <span class="muted">(${mortalityRate.toFixed(1)} %)</span></td>
+          <td>${formatInt.format(stock.mortality)} <span class="muted">(${mortalityRate.toFixed(1)} %, ${formatKg.format(stock.mortalityWeightKg)} kg)</span></td>
           <td>${formatG.format(target)} g <span class="muted">${target >= 1500 ? "Schlachtung" : "Sortierung"}</span></td>
           <td>${formatKg.format(feedNeededKg(stock, target))} kg</td>
         </tr>
@@ -239,7 +366,7 @@ function renderTimeline() {
     ...state.feedings.map((feeding) => ({
       date: feeding.date,
       type: `Fuetterung ${feeding.slot}`,
-      text: `${stockLabelForHistory(feeding.stockId)}: ${formatKg.format(feeding.feedKg)} kg Futter, ${formatInt.format(feeding.deadCount)} tote Fische`
+      text: `${stockLabelForHistory(feeding.stockId)}: ${formatKg.format(feeding.feedKg)} kg Futter, ${formatInt.format(feeding.deadCount)} tote Fische (${formatKg.format(feeding.mortalityWeightKg)} kg Verlust)`
     })),
     ...state.sortings.map((sorting) => ({
       date: sorting.date,
@@ -266,16 +393,12 @@ function renderTimeline() {
 
 function stockLabelForHistory(stockId) {
   const stock = stockById(stockId);
-  return stock ? stockLabel(stock) : "Geschlossener Bestand";
-}
-
-function setDefaultDates() {
-  document.querySelectorAll('input[type="date"]').forEach((input) => {
-    if (!input.value) input.value = today();
-  });
+  if (stock) return stockLabel(stock);
+  return "Geschlossener Bestand";
 }
 
 function render() {
+  state = normalizeState(state);
   renderSplitTargets();
   updateSelects();
   renderMetrics();
@@ -286,7 +409,9 @@ function render() {
 }
 
 function assertCapacity(stock, count, message) {
-  if (count > stock.count) throw new Error(`${message}: maximal ${stock.count} Fische verfuegbar.`);
+  if (count > stock.count) {
+    throw new Error(`${message}: maximal ${stock.count} Fische verfuegbar.`);
+  }
 }
 
 function closeIfEmpty(stock, date) {
@@ -304,9 +429,9 @@ forms.batch.addEventListener("submit", (event) => {
     id: uid("batch"),
     supplier: data.get("supplier").trim(),
     date: data.get("date"),
-    count: Math.round(number(data.get("count"))),
-    avgWeightG: number(data.get("avgWeight")),
-    feedConversion: number(data.get("feedConversion"), 1),
+    count: Math.round(toNumber(data.get("count"))),
+    avgWeightG: toNumber(data.get("avgWeight")),
+    feedConversion: toNumber(data.get("feedConversion"), 1),
     createdAt: new Date().toISOString()
   });
   forms.batch.reset();
@@ -319,7 +444,8 @@ forms.tank.addEventListener("submit", (event) => {
   state.tanks.push({
     id: uid("tank"),
     name: data.get("name").trim(),
-    volume: number(data.get("volume")),
+    type: data.get("type"),
+    volume: toNumber(data.get("volume")),
     note: data.get("note").trim(),
     createdAt: new Date().toISOString()
   });
@@ -330,14 +456,16 @@ forms.tank.addEventListener("submit", (event) => {
 forms.stocking.addEventListener("submit", (event) => {
   event.preventDefault();
   const data = new FormData(forms.stocking);
-  state.stocks.push(createStock({
-    batchId: data.get("batchId"),
-    tankId: data.get("tankId"),
-    count: data.get("count"),
-    avgWeightG: data.get("avgWeight"),
-    date: data.get("date"),
-    origin: "Erstbesatz"
-  }));
+  state.stocks.push(
+    createStock({
+      batchId: data.get("batchId"),
+      tankId: data.get("tankId"),
+      count: data.get("count"),
+      avgWeightG: data.get("avgWeight"),
+      date: data.get("date"),
+      origin: "Erstbesatz"
+    })
+  );
   forms.stocking.reset();
   render();
 });
@@ -348,8 +476,8 @@ forms.feeding.addEventListener("submit", (event) => {
   const stock = stockById(data.get("stockId"));
   if (!stock) return;
 
-  const deadCount = Math.max(0, Math.round(number(data.get("deadCount"))));
-  const feedKg = Math.max(0, number(data.get("feedKg")));
+  const deadCount = Math.max(0, Math.round(toNumber(data.get("deadCount"))));
+  const feedKg = Math.max(0, toNumber(data.get("feedKg")));
   const date = data.get("date");
 
   try {
@@ -360,11 +488,13 @@ forms.feeding.addEventListener("submit", (event) => {
   }
 
   const avgBeforeFeeding = averageWeightG(stock);
+  const mortalityWeightKg = (deadCount * avgBeforeFeeding) / 1000;
   stock.count -= deadCount;
-  stock.biomassKg = Math.max(0, stock.biomassKg - (deadCount * avgBeforeFeeding) / 1000);
+  stock.biomassKg = Math.max(0, stock.biomassKg - mortalityWeightKg);
   stock.biomassKg += feedKg * feedConversion(stock);
   stock.feedKg += feedKg;
   stock.mortality += deadCount;
+  stock.mortalityWeightKg += mortalityWeightKg;
   closeIfEmpty(stock, date);
 
   state.feedings.push({
@@ -375,6 +505,8 @@ forms.feeding.addEventListener("submit", (event) => {
     feedKg,
     deadCount,
     avgWeightGBefore: avgBeforeFeeding,
+    avgWeightGAfter: averageWeightG(stock),
+    mortalityWeightKg,
     createdAt: new Date().toISOString()
   });
 
@@ -389,11 +521,12 @@ forms.sorting.addEventListener("submit", (event) => {
   if (!source) return;
 
   const date = data.get("date");
-  const targets = [...els.splitTargets.querySelectorAll(".split-target")]
+  const targetFields = [...els.splitTargets.querySelectorAll(".split-target")];
+  const targets = targetFields
     .map((fieldset) => ({
       tankId: fieldset.querySelector('[name="targetTankId"]').value,
-      count: Math.round(number(fieldset.querySelector('[name="targetCount"]').value)),
-      avgWeightG: number(fieldset.querySelector('[name="targetAvgWeight"]').value)
+      count: Math.round(toNumber(fieldset.querySelector('[name="targetCount"]').value)),
+      avgWeightG: toNumber(fieldset.querySelector('[name="targetAvgWeight"]').value)
     }))
     .filter((target) => target.tankId && target.count > 0 && target.avgWeightG > 0);
 
@@ -417,16 +550,17 @@ forms.sorting.addEventListener("submit", (event) => {
   source.biomassKg = Math.max(0, source.biomassKg - (totalCount * sourceAvg) / 1000);
   closeIfEmpty(source, date);
 
-  const newStocks = targets.map((target) => createStock({
-    batchId: source.batchId,
-    tankId: target.tankId,
-    count: target.count,
-    avgWeightG: target.avgWeightG,
-    date,
-    origin: "Sortierung",
-    parentStockId: source.id
-  }));
-
+  const newStocks = targets.map((target) =>
+    createStock({
+      batchId: source.batchId,
+      tankId: target.tankId,
+      count: target.count,
+      avgWeightG: target.avgWeightG,
+      date,
+      origin: "Sortierung",
+      parentStockId: source.id
+    })
+  );
   state.stocks.push(...newStocks);
   state.sortings.push({
     id: uid("sorting"),
@@ -455,9 +589,9 @@ forms.harvest.addEventListener("submit", (event) => {
   const stock = stockById(data.get("stockId"));
   if (!stock) return;
 
-  const count = Math.round(number(data.get("count")));
+  const count = Math.round(toNumber(data.get("count")));
   const date = data.get("date");
-  const avgWeightG = number(data.get("avgWeight"), averageWeightG(stock)) || averageWeightG(stock);
+  const avgWeightG = toNumber(data.get("avgWeight"), averageWeightG(stock)) || averageWeightG(stock);
 
   try {
     assertCapacity(stock, count, "Schlachtung");
@@ -493,7 +627,7 @@ forms.target.addEventListener("submit", (event) => {
   event.preventDefault();
   const data = new FormData(forms.target);
   const stock = stockById(data.get("stockId"));
-  const targetWeight = number(data.get("targetWeight"));
+  const targetWeight = toNumber(data.get("targetWeight"));
   if (!stock || targetWeight <= 0) return;
 
   const needed = feedNeededKg(stock, targetWeight);
@@ -501,13 +635,14 @@ forms.target.addEventListener("submit", (event) => {
   const targetBiomass = (stock.count * targetWeight) / 1000;
   els.targetResult.innerHTML = `
     <strong>${stockLabel(stock)}</strong><br />
-    Aktuell: ${formatG.format(currentAvg)} g Ø, ${formatKg.format(stock.biomassKg)} kg Biomasse.<br />
+    Tagesaktuell: ${formatG.format(currentAvg)} g Ø, ${formatKg.format(stock.biomassKg)} kg Biomasse.<br />
     Ziel: ${formatG.format(targetWeight)} g Ø, ${formatKg.format(targetBiomass)} kg Biomasse.<br />
     Erforderliches Futter bei Codex ${feedConversion(stock)}:1: <strong>${formatKg.format(needed)} kg</strong>.
   `;
 });
 
 els.exportData.addEventListener("click", () => {
+  if (!confirmAdminPassword("Export")) return;
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -517,21 +652,43 @@ els.exportData.addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
+let importAuthorized = false;
+let importAuthorizationTimer = null;
+
+els.importDataButton?.addEventListener("click", () => {
+  if (!confirmAdminPassword("Import")) return;
+  clearTimeout(importAuthorizationTimer);
+  importAuthorized = true;
+  importAuthorizationTimer = setTimeout(() => {
+    importAuthorized = false;
+  }, 60000);
+  els.importData.click();
+});
+
 els.importData.addEventListener("change", async (event) => {
   const [file] = event.target.files;
-  if (!file) return;
+  if (!file) {
+    clearTimeout(importAuthorizationTimer);
+    importAuthorized = false;
+    return;
+  }
 
   try {
-    state = { ...emptyState(), ...JSON.parse(await file.text()) };
+    if (!importAuthorized && !confirmAdminPassword("Import")) return;
+    const imported = JSON.parse(await file.text());
+    state = normalizeState(imported);
     render();
   } catch {
     alert("Import fehlgeschlagen. Die Datei ist kein gueltiger JSON-Export.");
   } finally {
+    clearTimeout(importAuthorizationTimer);
+    importAuthorized = false;
     event.target.value = "";
   }
 });
 
 els.resetData.addEventListener("click", () => {
+  if (!confirmAdminPassword("Zuruecksetzen")) return;
   if (!confirm("Alle lokalen Daten zuruecksetzen?")) return;
   state = seedState();
   render();
