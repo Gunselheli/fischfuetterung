@@ -68,7 +68,10 @@
               <h2>Charge anlegen</h2>
             </div>
           </div>
-          <label>Lieferant <input name="supplier" required placeholder="z. B. Forellenhof Nord" /></label>
+          <label>Lieferant
+            <select name="supplier" required></select>
+          </label>
+          <label id="newSupplierField">Neuer Lieferant <input name="supplierNew" placeholder="z. B. Forellenhof Nord" /></label>
           <label>Lieferdatum <input name="date" type="date" required /></label>
           <label>Stueckzahl <input name="count" type="number" min="1" required placeholder="3000-5000" /></label>
           <label>Startgewicht je Fisch (g) <input name="avgWeight" type="number" min="0.1" step="0.1" required /></label>
@@ -187,12 +190,6 @@
               <h2>Catfish Futtertabelle</h2>
             </div>
           </div>
-          <label>Tabelle
-            <select id="feedingReferenceMode">
-              <option value="growout">Grow-out</option>
-              <option value="fry">Fry-Protokoll</option>
-            </select>
-          </label>
           <div class="table-wrap compact-table">
             <table>
               <thead id="feedingReferenceHead"></thead>

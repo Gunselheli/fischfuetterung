@@ -97,7 +97,6 @@
 
   const adviceForm = document.querySelector("#feedingAdviceForm");
   const adviceResult = document.querySelector("#feedingAdviceResult");
-  const referenceMode = document.querySelector("#feedingReferenceMode");
   const referenceHead = document.querySelector("#feedingReferenceHead");
   const referenceRows = document.querySelector("#feedingReferenceRows");
   const applyButton = document.querySelector("#applyFeedingAdvice");
@@ -226,27 +225,7 @@
   }
 
   function renderReference() {
-    if (!referenceMode || !referenceHead || !referenceRows) return;
-
-    if (referenceMode.value === "fry") {
-      referenceHead.innerHTML = `
-        <tr>
-          <th>Tag</th>
-          <th>Ø Gewicht</th>
-          <th>Futtergroesse</th>
-          <th>Futtertyp</th>
-        </tr>
-      `;
-      referenceRows.innerHTML = fryTable.map((row) => `
-        <tr>
-          <td>${row.day}</td>
-          <td>${row.weightG.toLocaleString("de-AT")} g</td>
-          <td>${row.feedSize}</td>
-          <td>${row.feedType}</td>
-        </tr>
-      `).join("");
-      return;
-    }
+    if (!referenceHead || !referenceRows) return;
 
     referenceHead.innerHTML = `
       <tr>
@@ -312,8 +291,6 @@
     const stock = stockById(new FormData(adviceForm).get("stockId"));
     if (stock) renderAdvice(stock);
   });
-
-  referenceMode?.addEventListener("change", renderReference);
 
   targetForm?.elements.stockId?.addEventListener("change", () => {
     const stock = stockById(targetForm.elements.stockId.value);

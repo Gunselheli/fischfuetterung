@@ -254,6 +254,11 @@ function stockLabel(stock) {
   return `${tank?.name || "Unbekannt"} | ${batch?.supplier || "Charge"} | ${formatInt.format(stock.count)} Stk | ${formatG.format(averageWeightG(stock))} g`;
 }
 
+function supplierNames() {
+  return [...new Set(state.batches.map((batch) => batch.supplier?.trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "de-AT"));
+}
+
 function setDefaultDates() {
   document.querySelectorAll('input[type="date"]').forEach((input) => {
     if (!input.value) input.value = today();
@@ -288,7 +293,46 @@ function renderSplitTargets() {
   }
 }
 
+function updateSupplierField() {
+  const select = forms.batch.elements.supplier;
+  const newSupplierField = document.querySelector("#newSupplierField");
+  const newSupplierInput = forms.batch.elements.supplierNew;
+  const needsNewSupplier = select.value === "__new__";
+
+  newSupplierField.hidden = !needsNewSupplier;
+  newSupplierInput.required = needsNewSupplier;
+  if (!needsNewSupplier) newSupplierInput.value = "";
+}
+
 function updateSelects() {
+  const supplierSelect = forms.batch.elements.supplier;
+  const currentSupplier = supplierSelect.value;
+  supplierSelect.innerHTML = "";
+
+  const blankSupplier = document.createElement("option");
+  blankSupplier.value = "";
+  blankSupplier.textContent = "Bitte waehlen";
+  supplierSelect.append(blankSupplier);
+
+  supplierNames().forEach((supplier) => {
+    const option = document.createElement("option");
+    option.value = supplier;
+    option.textContent = supplier;
+    supplierSelect.append(option);
+  });
+
+  const newSupplierOption = document.createElement("option");
+  newSupplierOption.value = "__new__";
+  newSupplierOption.textContent = "Neuen Lieferanten anlegen";
+  supplierSelect.append(newSupplierOption);
+
+  if (supplierNames().includes(currentSupplier)) {
+    supplierSelect.value = currentSupplier;
+  } else if (supplierNames().length === 0) {
+    supplierSelect.value = "__new__";
+  }
+  updateSupplierField();
+
   document.querySelectorAll('select[name="batchId"]').forEach((select) => {
     populateSelect(
       select,
@@ -447,9 +491,15 @@ function clearEnteredContent() {
 forms.batch.addEventListener("submit", (event) => {
   event.preventDefault();
   const data = new FormData(forms.batch);
+  const supplier = data.get("supplier") === "__new__" ? data.get("supplierNew").trim() : data.get("supplier").trim();
+  if (!supplier) {
+    alert("Bitte Lieferant auswaehlen oder neuen Lieferanten eingeben.");
+    return;
+  }
+
   state.batches.push({
     id: uid("batch"),
-    supplier: data.get("supplier").trim(),
+    supplier,
     date: data.get("date"),
     count: Math.round(toNumber(data.get("count"))),
     avgWeightG: toNumber(data.get("avgWeight")),
@@ -459,6 +509,8 @@ forms.batch.addEventListener("submit", (event) => {
   forms.batch.reset();
   render();
 });
+
+forms.batch.elements.supplier.addEventListener("change", updateSupplierField);
 
 forms.tank.addEventListener("submit", (event) => {
   event.preventDefault();
