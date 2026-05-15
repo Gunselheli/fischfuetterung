@@ -95,6 +95,31 @@
         </form>
       </section>
 
+      <section class="panel wide">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Jahresuebersicht</p>
+            <h2>Produktion & Schlachtung</h2>
+          </div>
+          <label class="year-picker">Jahr <select id="annualOverviewYear"></select></label>
+        </div>
+        <div class="metrics annual-metrics" id="annualOverviewMetrics" aria-label="Jahreskennzahlen"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Monat</th>
+                <th>Produktion</th>
+                <th>Produktion kg</th>
+                <th>Schlachtung</th>
+                <th>Schlachtung kg</th>
+              </tr>
+            </thead>
+            <tbody id="annualOverviewRows"></tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="grid two">
         <form class="panel form-card" id="batchForm">
           <div class="section-heading compact">
@@ -192,20 +217,6 @@
           <label>Datum <input name="date" type="date" required /></label>
           <div class="split-grid" id="splitTargets"></div>
           <button type="submit">Sortierung buchen</button>
-        </form>
-
-        <form class="panel form-card" id="harvestForm">
-          <div class="section-heading compact">
-            <div>
-              <p class="eyebrow">Entnahme</p>
-              <h2>Schlachtung dokumentieren</h2>
-            </div>
-          </div>
-          <label>Bestand <select name="stockId" required></select></label>
-          <label>Datum <input name="date" type="date" required /></label>
-          <label>Stueckzahl <input name="count" type="number" min="1" required /></label>
-          <label>Schlachtgewicht je Fisch (g) <input name="avgWeight" type="number" min="0.1" step="0.1" placeholder="leer = berechnet" /></label>
-          <button type="submit">Schlachtung speichern</button>
         </form>
       </section>
 

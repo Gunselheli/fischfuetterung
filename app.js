@@ -4,6 +4,7 @@ const TANK_TYPES = ["Aufzuchtbecken", "Vorsteckbecken", "Mastbecken", "Haelterbe
 const TANK_AREAS = ["Aufzuchtanlage", "Mastanlage"];
 const HOLDING_TANK_TYPE = "Haelterbecken";
 const HOLDING_HOURS = 24;
+const OVERVIEW_MONTHS = ["Januar", "Februar", "Maerz", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
 const today = () => new Date().toISOString().slice(0, 10);
 const uid = (prefix) => {
@@ -41,16 +42,18 @@ const forms = {
   stocking: document.querySelector("#stockingForm"),
   feeding: document.querySelector("#feedingForm"),
   sorting: document.querySelector("#sortingForm"),
-  harvest: document.querySelector("#harvestForm"),
   holdingHarvest: document.querySelector("#holdingHarvestForm"),
   target: document.querySelector("#targetForm"),
-  correction: document.querySelector("#correctionForm")
+  correction: document.querySelector("#correctionForm"),
+  annualOverviewYear: document.querySelector("#annualOverviewYear")
 };
 
 const els = {
   metrics: document.querySelector("#metrics"),
   stockRows: document.querySelector("#stockRows"),
   holdingRows: document.querySelector("#holdingRows"),
+  annualOverviewMetrics: document.querySelector("#annualOverviewMetrics"),
+  annualOverviewRows: document.querySelector("#annualOverviewRows"),
   timeline: document.querySelector("#timeline"),
   splitTargets: document.querySelector("#splitTargets"),
   splitTargetTemplate: document.querySelector("#splitTargetTemplate"),
@@ -323,6 +326,11 @@ function formatDateTime(date) {
   return `${date.toLocaleDateString("de-AT")} ${date.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
+function parseYearValue(value) {
+  const year = Math.round(toNumber(value, new Date().getFullYear()));
+  return year > 0 ? year : new Date().getFullYear();
+}
+
 function holdingReadyDate(stock) {
   const date = stockStartDate(stock);
   date.setHours(date.getHours() + HOLDING_HOURS);
@@ -340,6 +348,85 @@ function stockLabel(stock) {
   const batch = batchById(stock.batchId);
   const tank = tankById(stock.tankId);
   return `${tank?.name || "Unbekannt"} | ${batchDisplayNumber(batch)} | ${batch?.supplier || "Lieferant unbekannt"} | ${formatInt.format(stock.count)} Stk | ${formatG.format(averageWeightG(stock))} g`;
+}
+
+function yearFromDate(value) {
+  return new Date(`${value}T00:00:00`).getFullYear();
+}
+
+function annualOverviewYears() {
+  const years = new Set([new Date().getFullYear()]);
+  state.batches.forEach((batch) => {
+    if (batch.date) years.add(yearFromDate(batch.date));
+  });
+  state.harvests.forEach((harvest) => {
+    if (harvest.date) years.add(yearFromDate(harvest.date));
+  });
+  return [...years].sort((a, b) => b - a);
+}
+
+function annualOverviewData(year) {
+  const months = Array.from({ length: 12 }, (_, month) => ({
+    month,
+    producedFish: 0,
+    producedKg: 0,
+    harvestedFish: 0,
+    harvestedKg: 0
+  }));
+
+  state.batches.forEach((batch) => {
+    if (!batch.date || yearFromDate(batch.date) !== year) return;
+    const month = new Date(`${batch.date}T00:00:00`).getMonth();
+    months[month].producedFish += Math.max(0, Math.round(toNumber(batch.count)));
+    months[month].producedKg += Math.max(0, toNumber(batch.count) * toNumber(batch.avgWeightG) / 1000);
+  });
+
+  state.harvests.forEach((harvest) => {
+    if (!harvest.date || yearFromDate(harvest.date) !== year) return;
+    const month = new Date(`${harvest.date}T00:00:00`).getMonth();
+    months[month].harvestedFish += Math.max(0, Math.round(toNumber(harvest.count)));
+    months[month].harvestedKg += Math.max(0, toNumber(harvest.weightKg));
+  });
+
+  return months;
+}
+
+function renderAnnualOverview() {
+  if (!els.annualOverviewYear || !els.annualOverviewMetrics || !els.annualOverviewRows) return;
+
+  const years = annualOverviewYears();
+  const currentSelection = els.annualOverviewYear.value ? parseYearValue(els.annualOverviewYear.value) : years[0];
+  const year = years.includes(currentSelection) ? currentSelection : years[0];
+
+  els.annualOverviewYear.innerHTML = years
+    .map((value) => `<option value="${value}" ${value === year ? "selected" : ""}>${value}</option>`)
+    .join("");
+
+  const months = annualOverviewData(year);
+  const producedFish = months.reduce((sum, entry) => sum + entry.producedFish, 0);
+  const producedKg = months.reduce((sum, entry) => sum + entry.producedKg, 0);
+  const harvestedFish = months.reduce((sum, entry) => sum + entry.harvestedFish, 0);
+  const harvestedKg = months.reduce((sum, entry) => sum + entry.harvestedKg, 0);
+
+  els.annualOverviewMetrics.innerHTML = [
+    ["Produktion", formatInt.format(producedFish), `${formatKg.format(producedKg)} kg`],
+    ["Schlachtung", formatInt.format(harvestedFish), `${formatKg.format(harvestedKg)} kg`],
+    ["Differenz", formatInt.format(producedFish - harvestedFish), "Stueck"]
+  ]
+    .map(([label, value, helper]) => `<article class="metric-card"><span>${label}</span><strong>${value}</strong><span>${helper}</span></article>`)
+    .join("");
+
+  els.annualOverviewRows.innerHTML = months
+    .map((entry) => `
+      <tr>
+        <td>${OVERVIEW_MONTHS[entry.month]}</td>
+        <td>${formatInt.format(entry.producedFish)} Stk</td>
+        <td>${formatKg.format(entry.producedKg)} kg</td>
+        <td>${formatInt.format(entry.harvestedFish)} Stk</td>
+        <td>${formatKg.format(entry.harvestedKg)} kg</td>
+      </tr>
+    `)
+    .join("");
 }
 
 function supplierNames() {
@@ -655,6 +742,7 @@ function render() {
   renderMetrics();
   renderStockRows();
   renderHoldingRows();
+  renderAnnualOverview();
   renderTimeline();
   setDefaultDates();
   saveState();
@@ -905,13 +993,6 @@ function recordHarvest(form, stockFieldName = "stockId") {
   return true;
 }
 
-forms.harvest.addEventListener("submit", (event) => {
-  event.preventDefault();
-  if (!recordHarvest(forms.harvest)) return;
-  forms.harvest.reset();
-  render();
-});
-
 forms.holdingHarvest?.addEventListener("submit", (event) => {
   event.preventDefault();
   if (!recordHarvest(forms.holdingHarvest, "holdingStockId")) return;
@@ -967,6 +1048,7 @@ forms.correction?.addEventListener("submit", (event) => {
 
 forms.correction?.elements.correctionType.addEventListener("change", updateCorrectionSelect);
 forms.correction?.elements.correctionId.addEventListener("change", renderCorrectionFields);
+forms.annualOverviewYear?.addEventListener("change", renderAnnualOverview);
 
 forms.target.addEventListener("submit", (event) => {
   event.preventDefault();

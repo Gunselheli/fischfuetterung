@@ -363,6 +363,14 @@ td strong {
   gap: 0.9rem;
 }
 
+.year-picker {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: start;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .inline-form {
   display: grid;
   grid-template-columns: repeat(5, minmax(150px, 1fr));
@@ -374,6 +382,10 @@ td strong {
 .correction-fields {
   display: grid;
   gap: 0.9rem;
+}
+
+.annual-metrics {
+  margin-top: 0.5rem;
 }
 
 .result-card {
@@ -423,6 +435,7 @@ td strong {
 @media (max-width: 1020px) {
   .metrics,
   .grid.two,
+  .annual-metrics,
   .inline-form,
   .split-grid {
     grid-template-columns: 1fr;
