@@ -274,6 +274,10 @@
     if (!stock || targetG <= averageWeightG(stock)) return baseFeedNeededKg(stock, targetG);
     return projectedFeedToTarget(stock, targetG).feedKg;
   };
+  feedPerDayKg = (stock) => {
+    if (!stock) return 0;
+    return adviceFor(stock).feedKg;
+  };
 
   function syncUi() {
     populateAdviceSelect();

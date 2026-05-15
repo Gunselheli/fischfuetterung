@@ -248,6 +248,10 @@ function feedNeededKg(stock, targetG = targetWeightFor(stock)) {
   return missingKg / feedConversion(stock);
 }
 
+function feedPerDayKg(stock) {
+  return 0;
+}
+
 function stockLabel(stock) {
   const batch = batchById(stock.batchId);
   const tank = tankById(stock.tankId);
@@ -286,7 +290,7 @@ function populateSelect(select, items, getLabel, placeholder = "Bitte waehlen") 
 function renderSplitTargets() {
   if (els.splitTargets.children.length > 0) return;
 
-  for (let index = 0; index < 3; index += 1) {
+  for (let index = 0; index < 6; index += 1) {
     const fragment = els.splitTargetTemplate.content.cloneNode(true);
     fragment.querySelector("legend").textContent = `Zielbecken ${index + 1}`;
     els.splitTargets.append(fragment);
@@ -398,7 +402,7 @@ function renderStockRows() {
           <td>${formatKg.format(stock.feedKg)} kg</td>
           <td>${formatInt.format(stock.mortality)} <span class="muted">(${mortalityRate.toFixed(1)} %, ${formatKg.format(stock.mortalityWeightKg)} kg)</span></td>
           <td>${formatG.format(target)} g <span class="muted">${target >= 1500 ? "Schlachtung" : "Sortierung"}</span></td>
-          <td>${formatKg.format(feedNeededKg(stock, target))} kg</td>
+          <td>${formatKg.format(feedPerDayKg(stock))} kg</td>
         </tr>
       `;
     })
